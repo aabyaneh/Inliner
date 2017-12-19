@@ -5830,6 +5830,9 @@ void op_del() {
     print((uint64_t*) ")");
     println();
   }
+  
+  if (interpret)
+    pc = pc + INSTRUCTIONSIZE;
 }
 
 void op_beq() {
@@ -6270,6 +6273,7 @@ void selfie_optimize() {
             }
           }
         }
+        execute();
       } else {
         decode();
         execute();
