@@ -714,6 +714,7 @@ uint64_t OP_BEQ     = 4;
 uint64_t OP_DADDIU  = 25;
 uint64_t OP_LD      = 55;
 uint64_t OP_SD      = 63;
+uint64_t OP_DEL      = 5;
 
 uint64_t* OPCODES; // strings representing MIPS opcodes
 
@@ -752,6 +753,7 @@ void initDecoder() {
   *(OPCODES + OP_DADDIU)  = (uint64_t) "daddiu";
   *(OPCODES + OP_LD)      = (uint64_t) "ld";
   *(OPCODES + OP_SD)      = (uint64_t) "sd";
+  *(OPCODES + OP_DEL)      = (uint64_t) "del";
 
   FUNCTIONS = smalloc((FCT_DSUBU + 1) * SIZEOFUINT64STAR);
 
@@ -5815,6 +5817,21 @@ void op_sd() {
   }
 }
 
+void op_del() {
+
+  if (debug) {
+    printOpcode(opcode);
+    print((uint64_t*) " ");
+    printRegister(rt);
+    print((uint64_t*) ",");
+    printInteger(signExtend(immediate, 16));
+    print((uint64_t*) "(");
+    printRegister(rs);
+    print((uint64_t*) ")");
+    println();
+  }
+}
+
 void op_beq() {
   if (debug) {
     printOpcode(opcode);
@@ -6025,6 +6042,8 @@ void execute() {
     op_jal();
   else if (opcode == OP_J)
     op_j();
+  else if (opcode == OP_DEL)
+    op_del();
   else
     throwException(EXCEPTION_UNKNOWNINSTRUCTION, 0);
 }
@@ -6169,6 +6188,96 @@ void selfie_disassemble() {
 
     decode();
     execute();
+
+    pc = pc + INSTRUCTIONSIZE;
+  }
+
+  debug = 0;
+
+  outputName = (uint64_t*) 0;
+  outputFD   = 1;
+
+  print(selfieName);
+  print((uint64_t*) ": ");
+  printInteger(numberOfWrittenCharacters);
+  print((uint64_t*) " characters of assembly with ");
+  printInteger(codeLength / INSTRUCTIONSIZE);
+  print((uint64_t*) " instructions written into ");
+  print(assemblyName);
+  println();
+}
+
+void selfie_optimize() {
+  uint64_t rt1;
+  uint64_t rs1;
+  uint64_t immediate1;
+
+  assemblyName = getArgument();
+
+  if (codeLength == 0) {
+    print(selfieName);
+    print((uint64_t*) ": nothing to disassemble to output file ");
+    print(assemblyName);
+    println();
+
+    return;
+  }
+
+  // assert: assemblyName is mapped and not longer than maxFilenameLength
+
+  assemblyFD = openWriteOnly(assemblyName);
+
+  if (signedLessThan(assemblyFD, 0)) {
+    print(selfieName);
+    print((uint64_t*) ": could not create assembly output file ");
+    print(assemblyName);
+    println();
+
+    exit(EXITCODE_IOERROR);
+  }
+
+  outputName = assemblyName;
+  outputFD   = assemblyFD;
+
+  interpret = 0;
+
+  resetLibrary();
+  resetInterpreter();
+
+  debug = 1;
+
+  while(pc < codeLength) {
+    ir = loadInstruction(pc);
+    opcode = getOpcode(ir);
+
+    if (opcode == OP_SD) {
+      decodeIFormat();
+      execute();
+      rt1 = rt;
+      rs1 = rs;
+      immediate1 = immediate;
+
+      pc = pc + INSTRUCTIONSIZE;
+      ir = loadInstruction(pc);
+      opcode = getOpcode(ir);
+      if (opcode == OP_LD) {
+        decodeIFormat();
+        if (rt == rt1) {
+          if (immediate == immediate1) {
+            if (rs == rs1) {
+              storeInstruction(pc, encodeIFormat(5, 0, 0, 0));
+              opcode = OP_DEL;
+            }
+          }
+        }
+      } else {
+        decode();
+        execute();
+      }
+    } else {
+      decode();
+      execute();
+    }
 
     pc = pc + INSTRUCTIONSIZE;
   }
@@ -7407,6 +7516,8 @@ uint64_t selfie() {
         selfie_load();
       else if (stringCompare(option, (uint64_t*) "-sat"))
         selfie_sat();
+      else if (stringCompare(option, (uint64_t*) "-opt"))
+        selfie_optimize();
       else if (stringCompare(option, (uint64_t*) "-m"))
         return selfie_run(MIPSTER);
       else if (stringCompare(option, (uint64_t*) "-d")) {
