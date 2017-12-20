@@ -753,7 +753,7 @@ void initDecoder() {
   *(OPCODES + OP_DADDIU)  = (uint64_t) "daddiu";
   *(OPCODES + OP_LD)      = (uint64_t) "ld";
   *(OPCODES + OP_SD)      = (uint64_t) "sd";
-  *(OPCODES + OP_DEL)      = (uint64_t) "del";
+  *(OPCODES + OP_DEL)     = (uint64_t) "del";
 
   FUNCTIONS = smalloc((FCT_DSUBU + 1) * SIZEOFUINT64STAR);
 
@@ -974,6 +974,7 @@ uint64_t printCounters(uint64_t total, uint64_t* counters, uint64_t max);
 void     printProfile(uint64_t* message, uint64_t total, uint64_t* counters);
 
 void selfie_disassemble();
+void selfie_optimize();
 
 // ------------------------ GLOBAL CONSTANTS -----------------------
 
@@ -5818,6 +5819,23 @@ void op_sd() {
 }
 
 void op_del() {
+  uint64_t vaddr;
+  // uint64_t tmp;
+  //
+  // if (debug) {
+  //   printOpcode(opcode);
+  //   print((uint64_t*) " ");
+  //   printRegister(rt);
+  //   print((uint64_t*) ",");
+  //   printInteger(signExtend(immediate, 16));
+  //   print((uint64_t*) "(");
+  //   printRegister(rs);
+  //   print((uint64_t*) ")");
+  //   println();
+  // }
+
+  // if (interpret)
+  //   pc = pc + INSTRUCTIONSIZE;
 
   if (debug) {
     printOpcode(opcode);
@@ -5828,11 +5846,50 @@ void op_del() {
     print((uint64_t*) "(");
     printRegister(rs);
     print((uint64_t*) ")");
+    if (interpret) {
+      print((uint64_t*) ": ");
+      printRegister(rt);
+      print((uint64_t*) "=");
+      printInteger(*(registers+rt));
+      print((uint64_t*) ",");
+      printRegister(rs);
+      print((uint64_t*) "=");
+      printHexadecimal(*(registers+rs), 0);
+    }
+  }
+
+  if (interpret) {
+    vaddr = *(registers+rs) + signExtend(immediate, 16);
+
+    if (isValidVirtualAddress(vaddr)) {
+      if (isVirtualAddressMapped(pt, vaddr)) {
+        //*(registers+rt) = loadVirtualMemory(pt, vaddr);
+
+        // keep track of number of loads
+        loads = loads + 1;
+
+        *(loadsPerAddress + pc / INSTRUCTIONSIZE) = *(loadsPerAddress + pc / INSTRUCTIONSIZE) + 1;
+
+        pc = pc + INSTRUCTIONSIZE;
+      } else
+        throwException(EXCEPTION_PAGEFAULT, getPageOfVirtualAddress(vaddr));
+    } else
+      // TODO: pass invalid vaddr
+      throwException(EXCEPTION_INVALIDADDRESS, 0);
+  }
+
+  if (debug) {
+    if (interpret) {
+      print((uint64_t*) " -> ");
+      printRegister(rt);
+      print((uint64_t*) "=");
+      printInteger(*(registers+rt));
+      print((uint64_t*) "=memory[");
+      printHexadecimal(vaddr, 0);
+      print((uint64_t*) "]");
+    }
     println();
   }
-  
-  if (interpret)
-    pc = pc + INSTRUCTIONSIZE;
 }
 
 void op_beq() {
@@ -6214,6 +6271,7 @@ void selfie_optimize() {
   uint64_t rt1;
   uint64_t rs1;
   uint64_t immediate1;
+  uint64_t tmp;
 
   assemblyName = getArgument();
 
@@ -6255,7 +6313,7 @@ void selfie_optimize() {
 
     if (opcode == OP_SD) {
       decodeIFormat();
-      execute();
+      //execute();
       rt1 = rt;
       rs1 = rs;
       immediate1 = immediate;
@@ -6268,18 +6326,43 @@ void selfie_optimize() {
         if (rt == rt1) {
           if (immediate == immediate1) {
             if (rs == rs1) {
-              storeInstruction(pc, encodeIFormat(5, 0, 0, 0));
+              //storeInstruction(pc, encodeIFormat(5, 0, 0, 0));
+              storeInstruction(pc, encodeIFormat(OP_DEL, rs, rt, signExtend(immediate, 16)));
               opcode = OP_DEL;
             }
           }
         }
-        execute();
+        //execute();
       } else {
         decode();
-        execute();
+        //execute();
       }
     } else {
       decode();
+      //execute();
+    }
+
+    pc = pc + INSTRUCTIONSIZE;
+  }
+
+  resetInterpreter();
+
+  while(pc < codeLength) {
+    ir = loadInstruction(pc);
+
+    decode();
+
+    if (opcode == OP_BEQ) {
+      execute();
+
+      tmp = pc + INSTRUCTIONSIZE + signExtend(immediate, 16) * INSTRUCTIONSIZE;
+      ir = loadInstruction(tmp);
+      opcode = getOpcode(ir);
+      if (opcode == OP_DEL) {
+        decode();
+        storeInstruction(tmp, encodeIFormat(OP_LD, rs, rt, signExtend(immediate, 16)));
+      }
+    } else {
       execute();
     }
 
@@ -7520,8 +7603,6 @@ uint64_t selfie() {
         selfie_load();
       else if (stringCompare(option, (uint64_t*) "-sat"))
         selfie_sat();
-      else if (stringCompare(option, (uint64_t*) "-opt"))
-        selfie_optimize();
       else if (stringCompare(option, (uint64_t*) "-m"))
         return selfie_run(MIPSTER);
       else if (stringCompare(option, (uint64_t*) "-d")) {
@@ -7534,6 +7615,8 @@ uint64_t selfie() {
         return selfie_run(MINSTER);
       else if (stringCompare(option, (uint64_t*) "-mob"))
         return selfie_run(MOBSTER);
+      else if (stringCompare(option, (uint64_t*) "-opt"))
+        selfie_optimize();
       else {
         printUsage();
 
