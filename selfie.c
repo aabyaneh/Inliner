@@ -5819,7 +5819,7 @@ void op_sd() {
 }
 
 void op_del() {
-  uint64_t vaddr;
+  // uint64_t vaddr;
   // uint64_t tmp;
   //
   // if (debug) {
@@ -5859,23 +5859,7 @@ void op_del() {
   }
 
   if (interpret) {
-    vaddr = *(registers+rs) + signExtend(immediate, 16);
-
-    if (isValidVirtualAddress(vaddr)) {
-      if (isVirtualAddressMapped(pt, vaddr)) {
-        //*(registers+rt) = loadVirtualMemory(pt, vaddr);
-
-        // keep track of number of loads
-        loads = loads + 1;
-
-        *(loadsPerAddress + pc / INSTRUCTIONSIZE) = *(loadsPerAddress + pc / INSTRUCTIONSIZE) + 1;
-
-        pc = pc + INSTRUCTIONSIZE;
-      } else
-        throwException(EXCEPTION_PAGEFAULT, getPageOfVirtualAddress(vaddr));
-    } else
-      // TODO: pass invalid vaddr
-      throwException(EXCEPTION_INVALIDADDRESS, 0);
+    pc = pc + INSTRUCTIONSIZE;
   }
 
   if (debug) {
