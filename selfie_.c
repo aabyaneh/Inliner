@@ -6219,6 +6219,8 @@ uint64_t* call_list;
 // |  3 | new_addr  |
 // +----+-----------+
 
+uint64_t* binary_labeled;
+
 void func_scan(uint64_t reg_max) {
   uint64_t counter;
   uint64_t pc_saved;
@@ -6252,67 +6254,68 @@ void func_scan(uint64_t reg_max) {
           reg_max = rt;
         }
       }
-      if (rs > REG_A3) {
-        if (rs < REG_S0) {
-          pc_saved = pc;
-          rs_saved = rs;
-          pc = pc - INSTRUCTIONSIZE;
-          ir = loadInstruction(pc);
-          op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
-          decodeIFormat();
-          while ((op_rs != 1788 && op_rs != 1790) || rt != rs_saved) {
-            pc = pc - INSTRUCTIONSIZE;
-            ir = loadInstruction(pc);
-            op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
-            decodeIFormat();
-          }
-          // LD | REG_FP
-          if (op_rs == 1790 && signedGreaterThan(signExtend(immediate, 16), 0)) {
-            // TODO Search
-            var_pointer = malloc(4 * SIZEOFUINT64);
-            *var_pointer = (uint64_t) *(func_list + 5);
-            *(func_list + 5) = (uint64_t) var_pointer;
-            *(var_pointer + 1) = 1;
-            *(var_pointer + 2) = signExtend(immediate, 16);
-          }
-          pc = pc_saved;
-        }
-      }
+      // if (rs > REG_A3) {
+      //   if (rs < REG_S0) {
+      //     pc_saved = pc;
+      //     rs_saved = rs;
+      //     pc = pc - INSTRUCTIONSIZE;
+      //     ir = loadInstruction(pc);
+      //     op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
+      //     decodeIFormat();
+      //     while ((op_rs != 1788 && op_rs != 1790) || rt != rs_saved) {
+      //       pc = pc - INSTRUCTIONSIZE;
+      //       ir = loadInstruction(pc);
+      //       op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
+      //       decodeIFormat();
+      //     }
+      //     // LD | REG_FP
+      //     if (op_rs == 1790 && signedGreaterThan(signExtend(immediate, 16), 0)) {
+      //       // TODO Search
+      //       var_pointer = malloc(4 * SIZEOFUINT64);
+      //       *var_pointer = (uint64_t) *(func_list + 5);
+      //       *(func_list + 5) = (uint64_t) var_pointer;
+      //       *(var_pointer + 1) = 1;
+      //       *(var_pointer + 2) = signExtend(immediate, 16);
+      //     }
+      //     pc = pc_saved;
+      //   }
+      // }
     } else if (opcode == OP_SD) {
       decodeIFormat();
       if (rs == REG_FP) {
-        var_pointer = malloc(4 * SIZEOFUINT64);
-        *var_pointer = (uint64_t) *(func_list + 5);
-        *(func_list + 5) = (uint64_t) var_pointer;
-        *(var_pointer + 1) = 0; // this means maybe int
-        if (signedGreaterThan(signExtend(immediate, 16), 0))
+        if (signedGreaterThan(signExtend(immediate, 16), 0)) {
+          var_pointer = malloc(4 * SIZEOFUINT64);
+          *var_pointer = (uint64_t) *(func_list + 5);
+          *(func_list + 5) = (uint64_t) var_pointer;
+          *(var_pointer + 1) = 1; // this means store
           *(var_pointer + 2) = immediate;
-
-      } else if (rs > REG_A3) {
-        if (rs < REG_S0) {
-          pc_saved = pc;
-          rs_saved = rs;
-          pc = pc - INSTRUCTIONSIZE;
-          ir = loadInstruction(pc);
-          op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
-          decodeIFormat();
-          while ((op_rs == 1788 || op_rs == 1790) && rt == rs_saved) {
-            pc = pc - INSTRUCTIONSIZE;
-            ir = loadInstruction(pc);
-            op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
-            decodeIFormat();
-          }
-          if (op_rs == 1790 && signedGreaterThan(signExtend(immediate, 16), 0)) {
-            // TODO Search
-            var_pointer = malloc(4 * SIZEOFUINT64);
-            *var_pointer = (uint64_t) *(func_list + 5);
-            *(func_list + 5) = (uint64_t) var_pointer;
-            *(var_pointer + 1) = 1;
-            *(var_pointer + 2) = immediate;
-          }
-          pc = pc_saved;
         }
       }
+      // else if (rs > REG_A3) {
+      //   if (rs < REG_S0) {
+      //     pc_saved = pc;
+      //     rs_saved = rs;
+      //     pc = pc - INSTRUCTIONSIZE;
+      //     ir = loadInstruction(pc);
+      //     op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
+      //     decodeIFormat();
+      //     while ((op_rs == 1788 || op_rs == 1790) && rt == rs_saved) {
+      //       pc = pc - INSTRUCTIONSIZE;
+      //       ir = loadInstruction(pc);
+      //       op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
+      //       decodeIFormat();
+      //     }
+      //     if (op_rs == 1790 && signedGreaterThan(signExtend(immediate, 16), 0)) {
+      //       // TODO Search
+      //       var_pointer = malloc(4 * SIZEOFUINT64);
+      //       *var_pointer = (uint64_t) *(func_list + 5);
+      //       *(func_list + 5) = (uint64_t) var_pointer;
+      //       *(var_pointer + 1) = 1;
+      //       *(var_pointer + 2) = immediate;
+      //     }
+      //     pc = pc_saved;
+      //   }
+      // }
     }
 
     counter = counter + 1;
@@ -6322,7 +6325,11 @@ void func_scan(uint64_t reg_max) {
   }
 
   *(func_list + 4) = reg_max;
-  *(func_list + 6) = counter;
+
+  if (counter < 31 && *(func_list + 3) == 0)
+    *(func_list + 6) = 1;
+  else
+    *(func_list + 6) = 0;
 
 }
 
@@ -6336,6 +6343,7 @@ void selfie_inliner() {
   uint64_t pc_saved;
   uint64_t* formalparam;
   uint64_t* actualparam;
+  uint64_t labeled_inst;
 
   assemblyName = getArgument();
 
@@ -6370,6 +6378,18 @@ void selfie_inliner() {
   resetInterpreter();
 
   debug = 1;
+
+  binary_labeled = malloc(maxBinaryLength);
+  while(pc < codeLength) {
+    ir = loadInstruction(pc);
+    labeled_inst = pc;
+    labeled_inst = leftShift(labeled_inst, 32) + ir;
+    *(binary_labeled + (pc/INSTRUCTIONSIZE)) = labeled_inst;
+    pc = pc + INSTRUCTIONSIZE;
+  }
+
+  resetLibrary();
+  resetInterpreter();
 
   while(pc < codeLength) {
     ir = loadInstruction(pc);
@@ -6417,44 +6437,97 @@ void selfie_inliner() {
               }
             }
           }
-
         }
       }
-    } else if (opcode == OP_JAL) {
+    }
+    // else if (opcode == OP_JAL) {
+    //   decodeJFormat();
+    //   entry = searchFuncTable(instr_index * INSTRUCTIONSIZE);
+    //   if (entry != (uint64_t*) 0) {
+    //     params = *(entry + 2);
+    //     cnt = 0;
+    //     pc_saved = pc;
+    //     while (cnt < params) {
+    //       pc = pc - INSTRUCTIONSIZE;
+    //       ir = loadInstruction(pc);
+    //       op_rs = rightShift(leftShift(instruction, 32), 32);
+    //       while (op_rs != 1740505072) {
+    //         pc = pc - INSTRUCTIONSIZE;
+    //         ir = loadInstruction(pc);
+    //         op_rs = rightShift(leftShift(instruction, 32), 32);
+    //       }
+    //       pc = pc - INSTRUCTIONSIZE;
+    //       ir = loadInstruction(pc);
+    //       op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
+    //       if (op_rs == 1790 || op_rs == 1788) {
+    //         formalparam = searchParlist(entry, cnt * REGISTERSIZE + 16);
+    //         actualparam = malloc(4 * SIZEOFUINT64);
+    //         *actualparam = (uint64_t) call_list;
+    //         call_list = actualparam;
+    //         if (formalparam != (uint64_t*)0) {
+    //           *(actualparam + 1) = *(formalparam + 1);
+    //           *(actualparam + 2) = *(formalparam + 2);
+    //           *(actualparam + 3) = signExtend(immediate, 16);
+    //         } else {
+    //           *(actualparam + 1) = 0;
+    //           *(actualparam + 2) = cnt * REGISTERSIZE + 16;
+    //           *(actualparam + 3) = signExtend(immediate, 16);
+    //         }
+    //       }
+    //       cnt = cnt + 1;
+    //     }
+    //   }
+    //   pc = pc_saved;
+    // }
+
+    pc = pc + INSTRUCTIONSIZE;
+  }
+
+
+  resetLibrary();
+  resetInterpreter();
+
+  while(pc < codeLength) {
+    ir = loadInstruction(pc);
+    opcode = getOpcode(ir);
+
+    if (opcode == OP_JAL) {
       decodeJFormat();
       entry = searchFuncTable(instr_index * INSTRUCTIONSIZE);
       if (entry != (uint64_t*) 0) {
-        params = *(entry + 2);
-        cnt = 0;
-        pc_saved = pc;
-        while (cnt < params) {
-          pc = pc - INSTRUCTIONSIZE;
-          ir = loadInstruction(pc);
-          op_rs = rightShift(leftShift(instruction, 32), 32);
-          while (op_rs != 1740505072) {
+        if (*(entry + 6) == 1) {
+          params = *(entry + 2);
+          cnt = 0;
+          pc_saved = pc;
+          while (cnt < params) {
             pc = pc - INSTRUCTIONSIZE;
             ir = loadInstruction(pc);
             op_rs = rightShift(leftShift(instruction, 32), 32);
-          }
-          pc = pc - INSTRUCTIONSIZE;
-          ir = loadInstruction(pc);
-          op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
-          if (op_rs == 1790 || op_rs == 1788) {
-            formalparam = searchParlist(entry, cnt * REGISTERSIZE + 16);
-            actualparam = malloc(4 * SIZEOFUINT64);
-            *actualparam = (uint64_t) call_list;
-            call_list = actualparam;
-            if (formalparam != (uint64_t*)0) {
-              *(actualparam + 1) = *(formalparam + 1);
-              *(actualparam + 2) = *(formalparam + 2);
-              *(actualparam + 3) = signExtend(immediate, 16);
-            } else {
-              *(actualparam + 1) = 0;
-              *(actualparam + 2) = cnt * REGISTERSIZE + 16;
-              *(actualparam + 3) = signExtend(immediate, 16);
+            while (op_rs != 1740505072) {
+              pc = pc - INSTRUCTIONSIZE;
+              ir = loadInstruction(pc);
+              op_rs = rightShift(leftShift(instruction, 32), 32);
             }
+            pc = pc - INSTRUCTIONSIZE;
+            ir = loadInstruction(pc);
+            op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
+            if (op_rs == 1790 || op_rs == 1788) {
+              formalparam = searchParlist(entry, cnt * REGISTERSIZE + 16);
+              actualparam = malloc(4 * SIZEOFUINT64);
+              *actualparam = (uint64_t) call_list;
+              call_list = actualparam;
+              if (formalparam != (uint64_t*)0) {
+                *(actualparam + 1) = *(formalparam + 1);
+                *(actualparam + 2) = *(formalparam + 2);
+                *(actualparam + 3) = signExtend(immediate, 16);
+              } else {
+                *(actualparam + 1) = 0;
+                *(actualparam + 2) = cnt * REGISTERSIZE + 16;
+                *(actualparam + 3) = signExtend(immediate, 16);
+              }
+            }
+            cnt = cnt + 1;
           }
-          cnt = cnt + 1;
         }
       }
       pc = pc_saved;
