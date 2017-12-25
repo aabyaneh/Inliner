@@ -6196,6 +6196,7 @@ void selfie_disassemble() {
 // |  3 | locals    |
 // |  4 | regs      |
 // |  5 | parlist   |
+// |  6 | ins_count |
 // +----+-----------+
 
 uint64_t* func_list;
@@ -6204,6 +6205,16 @@ uint64_t* func_list;
 // +----+-----------+
 // |  0 | next      | pointer to next
 // |  1 | type      |
+// |  2 | old_addr  |
+// |  3 | new_addr  |
+// +----+-----------+
+
+uint64_t* call_list;
+
+// call_list struct:
+// +----+-----------+
+// |  0 | next      | pointer to next
+// |  1 | func_addr |
 // |  2 | old_addr  |
 // |  3 | new_addr  |
 // +----+-----------+
@@ -6320,6 +6331,11 @@ void selfie_inliner() {
   uint64_t params;
   uint64_t op_rs;
   uint64_t* func;
+  uint64_t* entry;
+  uint64_t cnt;
+  uint64_t pc_saved;
+  uint64_t* formalparam;
+  uint64_t* actualparam;
 
   assemblyName = getArgument();
 
@@ -6404,6 +6420,44 @@ void selfie_inliner() {
 
         }
       }
+    } else if (opcode == OP_JAL) {
+      decodeJFormat();
+      entry = searchFuncTable(instr_index * INSTRUCTIONSIZE);
+      if (entry != (uint64_t*) 0) {
+        params = *(entry + 2);
+        cnt = 0;
+        pc_saved = pc;
+        while (cnt < params) {
+          pc = pc - INSTRUCTIONSIZE;
+          ir = loadInstruction(pc);
+          op_rs = rightShift(leftShift(instruction, 32), 32);
+          while (op_rs != 1740505072) {
+            pc = pc - INSTRUCTIONSIZE;
+            ir = loadInstruction(pc);
+            op_rs = rightShift(leftShift(instruction, 32), 32);
+          }
+          pc = pc - INSTRUCTIONSIZE;
+          ir = loadInstruction(pc);
+          op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
+          if (op_rs == 1790 || op_rs == 1788) {
+            formalparam = searchParlist(entry, cnt * REGISTERSIZE + 16);
+            actualparam = malloc(4 * SIZEOFUINT64);
+            *actualparam = (uint64_t) call_list;
+            call_list = actualparam;
+            if (formalparam != (uint64_t*)0) {
+              *(actualparam + 1) = *(formalparam + 1);
+              *(actualparam + 2) = *(formalparam + 2);
+              *(actualparam + 3) = signExtend(immediate, 16);
+            } else {
+              *(actualparam + 1) = 0;
+              *(actualparam + 2) = cnt * REGISTERSIZE + 16;
+              *(actualparam + 3) = signExtend(immediate, 16);
+            }
+          }
+          cnt = cnt + 1;
+        }
+      }
+      pc = pc_saved;
     }
 
     pc = pc + INSTRUCTIONSIZE;
