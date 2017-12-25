@@ -6188,6 +6188,242 @@ void selfie_disassemble() {
   println();
 }
 
+// func struct:
+// +----+-----------+
+// |  0 | next      | pointer to next
+// |  1 | pc        |
+// |  2 | params    |
+// |  3 | locals    |
+// |  4 | regs      |
+// |  5 | parlist   |
+// +----+-----------+
+
+uint64_t* func_list;
+
+// parlist struct:
+// +----+-----------+
+// |  0 | next      | pointer to next
+// |  1 | type      |
+// |  2 | old_addr  |
+// |  3 | new_addr  |
+// +----+-----------+
+
+void func_scan(uint64_t reg_max) {
+  uint64_t counter;
+  uint64_t pc_saved;
+  uint64_t rs_saved;
+  uint64_t* var_pointer;
+
+  ir = loadInstruction(pc);
+  op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
+  counter = 0;
+  // until daddiu $sp,$fp,0
+  while (op_rs != 830) {
+
+    opcode = getOpcode(ir);
+
+    if (opcode == 0) {
+      rd = getRD();
+      if (rd > reg_max) {
+        if (rd < REG_S0)
+          reg_max = rd;
+      }
+    } else if (opcode == OP_DADDIU) {
+      rt = getRT();
+      if (rt > reg_max)
+        if (rt < REG_S0) {
+          reg_max = rt;
+        }
+    } else if (opcode == OP_LD) {
+      decodeIFormat();
+      if (rt > reg_max) {
+        if (rt < REG_S0) {
+          reg_max = rt;
+        }
+      }
+      if (rs > REG_A3) {
+        if (rs < REG_S0) {
+          pc_saved = pc;
+          rs_saved = rs;
+          pc = pc - INSTRUCTIONSIZE;
+          ir = loadInstruction(pc);
+          op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
+          decodeIFormat();
+          while ((op_rs != 1788 && op_rs != 1790) || rt != rs_saved) {
+            pc = pc - INSTRUCTIONSIZE;
+            ir = loadInstruction(pc);
+            op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
+            decodeIFormat();
+          }
+          // LD | REG_FP
+          if (op_rs == 1790 && signedGreaterThan(signExtend(immediate, 16), 0)) {
+            // TODO Search
+            var_pointer = malloc(4 * SIZEOFUINT64);
+            *var_pointer = (uint64_t) *(func_list + 5);
+            *(func_list + 5) = (uint64_t) var_pointer;
+            *(var_pointer + 1) = 1;
+            *(var_pointer + 2) = signExtend(immediate, 16);
+          }
+          pc = pc_saved;
+        }
+      }
+    } else if (opcode == OP_SD) {
+      decodeIFormat();
+      if (rs == REG_FP) {
+        var_pointer = malloc(4 * SIZEOFUINT64);
+        *var_pointer = (uint64_t) *(func_list + 5);
+        *(func_list + 5) = (uint64_t) var_pointer;
+        *(var_pointer + 1) = 0; // this means maybe int
+        if (signedGreaterThan(signExtend(immediate, 16), 0))
+          *(var_pointer + 2) = immediate;
+
+      } else if (rs > REG_A3) {
+        if (rs < REG_S0) {
+          pc_saved = pc;
+          rs_saved = rs;
+          pc = pc - INSTRUCTIONSIZE;
+          ir = loadInstruction(pc);
+          op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
+          decodeIFormat();
+          while ((op_rs == 1788 || op_rs == 1790) && rt == rs_saved) {
+            pc = pc - INSTRUCTIONSIZE;
+            ir = loadInstruction(pc);
+            op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
+            decodeIFormat();
+          }
+          if (op_rs == 1790 && signedGreaterThan(signExtend(immediate, 16), 0)) {
+            // TODO Search
+            var_pointer = malloc(4 * SIZEOFUINT64);
+            *var_pointer = (uint64_t) *(func_list + 5);
+            *(func_list + 5) = (uint64_t) var_pointer;
+            *(var_pointer + 1) = 1;
+            *(var_pointer + 2) = immediate;
+          }
+          pc = pc_saved;
+        }
+      }
+    }
+
+    counter = counter + 1;
+    pc = pc + INSTRUCTIONSIZE;
+    ir = loadInstruction(pc);
+    op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
+  }
+
+  *(func_list + 4) = reg_max;
+  *(func_list + 6) = counter;
+
+}
+
+void selfie_inliner() {
+  uint64_t locals;
+  uint64_t params;
+  uint64_t op_rs;
+  uint64_t* func;
+
+  assemblyName = getArgument();
+
+  if (codeLength == 0) {
+    print(selfieName);
+    print((uint64_t*) ": nothing to disassemble to output file ");
+    print(assemblyName);
+    println();
+
+    return;
+  }
+
+  // assert: assemblyName is mapped and not longer than maxFilenameLength
+
+  assemblyFD = openWriteOnly(assemblyName);
+
+  if (signedLessThan(assemblyFD, 0)) {
+    print(selfieName);
+    print((uint64_t*) ": could not create assembly output file ");
+    print(assemblyName);
+    println();
+
+    exit(EXITCODE_IOERROR);
+  }
+
+  outputName = assemblyName;
+  outputFD   = assemblyFD;
+
+  interpret = 0;
+
+  resetLibrary();
+  resetInterpreter();
+
+  debug = 1;
+
+  while(pc < codeLength) {
+    ir = loadInstruction(pc);
+    opcode = getOpcode(ir);
+
+    // sd $ra,0($sp)
+    if (opcode == OP_SD) {
+      rt = getRT(ir);
+      if (rt == REG_RA) {
+        rs = getRS(ir);
+        if (rs == REG_SP) {
+          func = malloc(2 * SIZEOFUINT64STAR + 5 * SIZEOFUINT64);
+          *(func + 5) = 0;
+          *func = (uint64_t) func_list;
+          func_list = func;
+          *(func + 1) = pc - INSTRUCTIONSIZE;
+
+          // daddiu $sp,$sp,-localVariables ?
+          pc = pc + 4 * INSTRUCTIONSIZE;
+          ir = loadInstruction(pc);
+          opcode = getOpcode(ir);
+          if (opcode == OP_DADDIU) {
+            decodeIFormat();
+            if (rt == REG_SP) {
+              if (rs == REG_SP) {
+                locals = (-signExtend(immediate, 16)) / REGISTERSIZE;
+                *(func + 3) = locals;
+                pc = pc + INSTRUCTIONSIZE;
+              }
+            }
+          }
+
+          func_scan();
+
+          // daddiu $sp,$sp,(parameters + 1)
+          pc = pc + 4 * INSTRUCTIONSIZE;
+          ir = loadInstruction(pc);
+          opcode = getOpcode(ir);
+          if (opcode == OP_DADDIU) {
+            decodeIFormat();
+            if (rt == REG_SP) {
+              if (rs == REG_SP) {
+                params = (signExtend(immediate, 16) / REGISTERSIZE) - 1;
+                *(func + 2) = params;
+              }
+            }
+          }
+
+        }
+      }
+    }
+
+    pc = pc + INSTRUCTIONSIZE;
+  }
+
+  debug = 0;
+
+  outputName = (uint64_t*) 0;
+  outputFD   = 1;
+
+  print(selfieName);
+  print((uint64_t*) ": ");
+  printInteger(numberOfWrittenCharacters);
+  print((uint64_t*) " characters of assembly with ");
+  printInteger(codeLength / INSTRUCTIONSIZE);
+  print((uint64_t*) " instructions written into ");
+  print(assemblyName);
+  println();
+}
+
 // -----------------------------------------------------------------
 // ---------------------------- CONTEXTS ---------------------------
 // -----------------------------------------------------------------
