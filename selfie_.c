@@ -1002,6 +1002,7 @@ uint64_t debug = 0; // flag for logging code execution
 // hardware thread state
 
 uint64_t pc = 0; // program counter
+uint64_t pc_labeled = 0; // program counter
 uint64_t ir = 0; // instruction register
 
 uint64_t* registers = (uint64_t*) 0; // general-purpose registers
@@ -6217,22 +6218,25 @@ uint64_t* call_list;
 // |  1 | func_addr |
 // |  2 | old_addr  |
 // |  3 | new_addr  |
+// |  4 | REG       |
 // +----+-----------+
 
 uint64_t* binary_labeled;
 
-void func_scan(uint64_t reg_max) {
+void func_scan() {
+  uint64_t reg_max;
   uint64_t counter;
   uint64_t pc_saved;
   uint64_t rs_saved;
   uint64_t* var_pointer;
+  uint64_t op_re;
 
+  reg_max = 0;
   ir = loadInstruction(pc);
   op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
   counter = 0;
   // until daddiu $sp,$fp,0
   while (op_rs != 830) {
-
     opcode = getOpcode(ir);
 
     if (opcode == 0) {
@@ -6248,7 +6252,8 @@ void func_scan(uint64_t reg_max) {
           reg_max = rt;
         }
     } else if (opcode == OP_LD) {
-      decodeIFormat();
+      // decodeIFormat();
+      rt = getRT();
       if (rt > reg_max) {
         if (rt < REG_S0) {
           reg_max = rt;
@@ -6316,6 +6321,11 @@ void func_scan(uint64_t reg_max) {
       //     pc = pc_saved;
       //   }
       // }
+    } else if (opcode == OP_JAL) { // recursive
+      decodeJFormat();
+      if (*(func_list + 1) == (instr_index * INSTRUCTIONSIZE)) {
+        *(func_list + 6) = 2;
+      }
     }
 
     counter = counter + 1;
@@ -6326,7 +6336,7 @@ void func_scan(uint64_t reg_max) {
 
   *(func_list + 4) = reg_max;
 
-  if (counter < 31 && *(func_list + 3) == 0)
+  if (counter < 31 && *(func_list + 3) == 0 && *(func_list + 6) != 2)
     *(func_list + 6) = 1;
   else
     *(func_list + 6) = 0;
@@ -6344,6 +6354,7 @@ void selfie_inliner() {
   uint64_t* formalparam;
   uint64_t* actualparam;
   uint64_t labeled_inst;
+  uint64_t tmp;
 
   assemblyName = getArgument();
 
@@ -6379,18 +6390,20 @@ void selfie_inliner() {
 
   debug = 1;
 
-  binary_labeled = malloc(maxBinaryLength);
-  while(pc < codeLength) {
-    ir = loadInstruction(pc);
-    labeled_inst = pc;
-    labeled_inst = leftShift(labeled_inst, 32) + ir;
-    *(binary_labeled + (pc/INSTRUCTIONSIZE)) = labeled_inst;
-    pc = pc + INSTRUCTIONSIZE;
-  }
+  // for labeled binary creation
+  binary_labeled = malloc(2 * maxBinaryLength);
+  // while(pc < codeLength) {
+  //   ir = loadInstruction(pc);
+  //   labeled_inst = pc;
+  //   labeled_inst = leftShift(labeled_inst, 32) + ir;
+  //   *(binary_labeled + (pc/INSTRUCTIONSIZE)) = labeled_inst;
+  //   pc = pc + INSTRUCTIONSIZE;
+  // }
 
-  resetLibrary();
-  resetInterpreter();
+  // resetLibrary();
+  // resetInterpreter();
 
+  // for functions analysis
   while(pc < codeLength) {
     ir = loadInstruction(pc);
     opcode = getOpcode(ir);
@@ -6403,6 +6416,7 @@ void selfie_inliner() {
         if (rs == REG_SP) {
           func = malloc(2 * SIZEOFUINT64STAR + 5 * SIZEOFUINT64);
           *(func + 5) = 0;
+          *(func + 6) = 0;
           *func = (uint64_t) func_list;
           func_list = func;
           *(func + 1) = pc - INSTRUCTIONSIZE;
@@ -6487,6 +6501,7 @@ void selfie_inliner() {
   resetLibrary();
   resetInterpreter();
 
+  // for inlining
   while(pc < codeLength) {
     ir = loadInstruction(pc);
     opcode = getOpcode(ir);
@@ -6499,6 +6514,8 @@ void selfie_inliner() {
           params = *(entry + 2);
           cnt = 0;
           pc_saved = pc;
+          if (params > 0)
+            call_list = malloc(params * SIZEOFUINT64);
           while (cnt < params) {
             pc = pc - INSTRUCTIONSIZE;
             ir = loadInstruction(pc);
@@ -6512,28 +6529,102 @@ void selfie_inliner() {
             ir = loadInstruction(pc);
             op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
             if (op_rs == 1790 || op_rs == 1788) {
+              decodeIFormat();
               formalparam = searchParlist(entry, cnt * REGISTERSIZE + 16);
-              actualparam = malloc(4 * SIZEOFUINT64);
-              *actualparam = (uint64_t) call_list;
-              call_list = actualparam;
+              actualparam = malloc(5 * SIZEOFUINT64);
+              //*(call_list + (params-cnt-1)) = (uint64_t) actualparam;
+              *(call_list + cnt) = (uint64_t) actualparam;
               if (formalparam != (uint64_t*)0) {
                 *(actualparam + 1) = *(formalparam + 1);
                 *(actualparam + 2) = *(formalparam + 2);
                 *(actualparam + 3) = signExtend(immediate, 16);
+                *(actualparam + 4) = rs;
               } else {
                 *(actualparam + 1) = 0;
                 *(actualparam + 2) = cnt * REGISTERSIZE + 16;
                 *(actualparam + 3) = signExtend(immediate, 16);
+                *(actualparam + 4) = rs;
               }
+            } else {
+              actualparam = malloc(5 * SIZEOFUINT64);
+              *(call_list + cnt) = (uint64_t) actualparam;
+              *(actualparam + 1) = 1;
+              *(actualparam + 2) = cnt * REGISTERSIZE + 16;
+              *(actualparam + 3) = 0;
+              *(actualparam + 4) = 0;
             }
+
+            // delete these insts
+            if (*(actualparam + 1) == 0) {
+              tmp = pc_labeled - (pc_saved-pc)/INSTRUCTIONSIZE;
+              ir = encodeIFormat(5, 0, 0, 0);
+              labeled_inst = pc;
+              labeled_inst = leftShift(labeled_inst, 32) + ir;
+              *(binary_labeled + tmp) = labeled_inst;
+
+              tmp = tmp + 1;
+              *(binary_labeled + tmp) = labeled_inst;
+              tmp = tmp + 1;
+              *(binary_labeled + tmp) = labeled_inst;
+            }
+
             cnt = cnt + 1;
           }
+
+          // preprocess of parameters
+          cnt = 0;
+          tmp = 1;
+          func = searchCallerFunction(func_list, pc);
+          locals = (*(func + 3)) * REGISTERSIZE;
+          while (cnt < params) {
+            actualparam = (uint64_t*) *(call_list + (params-cnt-1));
+            if (*(actualparam + 1) == 1) {
+              *(actualparam + 3) = -(locals - (tmp * REGISTERSIZE));
+              tmp = tmp + 1;
+            }
+          }
+
+          // to first inst of the function after prolog
+          pc = (instr_index+5) * INSTRUCTIONSIZE;
+          // if (*(entry + 3) > 0) later
+          ir = loadInstruction(pc);
+          op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
+          // until daddiu $sp,$fp,0
+          while (op_rs != 830) {
+            decode();
+            if (opcode == OP_LD || opcode == OP_SD) {
+              if (rs == REG_FP) {
+                if (signedGreaterThan(signExtend(immediate, 16), 0)) {
+                  actualparam = (uint64_t*) *(call_list + ((immediate - 16)/REGISTERSIZE));
+                  if (*(actualparam + 1) == 0) {
+                    ir = encodeIFormat(opcode, *(actualparam + 4), rt, *(actualparam + 3));
+                  } else {
+                    ir = encodeIFormat(opcode, rs, rt, *(actualparam + 3));
+                  }
+                }
+              }
+            }
+            labeled_inst = pc;
+            labeled_inst = leftShift(labeled_inst, 32) + ir;
+            *(binary_labeled + pc_labeled) = labeled_inst;
+            pc_labeled = pc_labeled + 1;
+            pc = pc + INSTRUCTIONSIZE;
+            ir = loadInstruction(pc);
+            op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
+          }
+          pc = pc_saved;
+          pc_labeled = pc_labeled - 1;
         }
       }
-      pc = pc_saved;
+
+    } else {
+      labeled_inst = pc;
+      labeled_inst = leftShift(labeled_inst, 32) + ir;
+      *(binary_labeled + pc_labeled) = labeled_inst;
     }
 
     pc = pc + INSTRUCTIONSIZE;
+    pc_labeled = pc_labeled + 1;
   }
 
   debug = 0;
