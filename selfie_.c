@@ -6573,14 +6573,14 @@ void selfie_inliner() {
 
           // preprocess of parameters
           cnt = 0;
-          tmp = 1;
+          tmp = 0;
           func = searchCallerFunction(func_list, pc);
           locals = (*(func + 3)) * REGISTERSIZE;
           while (cnt < params) {
             actualparam = (uint64_t*) *(call_list + (params-cnt-1));
             if (*(actualparam + 1) == 1) {
-              *(actualparam + 3) = -(locals - (tmp * REGISTERSIZE));
               tmp = tmp + 1;
+              *(actualparam + 3) = -(locals - (tmp * REGISTERSIZE));
             }
           }
 
@@ -6612,8 +6612,15 @@ void selfie_inliner() {
             ir = loadInstruction(pc);
             op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
           }
+
+          // free parameters
+          if (tmp > 0) {
+            ir = encodeIFormat(OP_DADDIU, REG_SP, REG_SP, tmp * REGISTERSIZE);
+            labeled_inst = ir;
+            *(binary_labeled + pc_labeled) = labeled_inst;
+          }
+
           pc = pc_saved;
-          pc_labeled = pc_labeled - 1;
         }
       }
 
