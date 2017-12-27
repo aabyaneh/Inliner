@@ -6223,6 +6223,51 @@ uint64_t* call_list;
 
 uint64_t* binary_labeled;
 
+uint64_t* searchFuncTable(uint64_t func_pc) {
+  uint64_t* entry;
+
+  entry = func_list;
+  while (entry != (uint64_t*) 0) {
+    if (*(entry + 1) == func_pc)
+      return entry;
+
+    entry = *entry;
+  }
+
+  return (uint64_t*) 0;
+}
+
+uint64_t* searchParlist(uint64_t* entry, uint64_t offset) {
+  uint64_t* par_entry;
+
+  par_entry = *(entry + 5);
+  while (par_entry != (uint64_t*) 0) {
+    if (*(par_entry + 2) == offest)
+      return par_entry;
+
+    par_entry = *par_entry;
+  }
+
+  return (uint64_t*) 0;
+}
+
+uint64_t* searchCallerFunction(uint64_t pc) {
+  uint64_t* entry;
+  uint64_t tmp;
+
+  entry = func_list;
+  while (entry != (uint64_t*) 0) {
+    tmp = *(entry + 6) + 11;
+    if (pc > *(entry + 1))
+      if (pc < tmp)
+        return entry;
+
+    entry = *entry;
+  }
+
+  return (uint64_t*) 0;
+}
+
 void func_scan() {
   uint64_t reg_max;
   uint64_t counter;
@@ -6259,32 +6304,6 @@ void func_scan() {
           reg_max = rt;
         }
       }
-      // if (rs > REG_A3) {
-      //   if (rs < REG_S0) {
-      //     pc_saved = pc;
-      //     rs_saved = rs;
-      //     pc = pc - INSTRUCTIONSIZE;
-      //     ir = loadInstruction(pc);
-      //     op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
-      //     decodeIFormat();
-      //     while ((op_rs != 1788 && op_rs != 1790) || rt != rs_saved) {
-      //       pc = pc - INSTRUCTIONSIZE;
-      //       ir = loadInstruction(pc);
-      //       op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
-      //       decodeIFormat();
-      //     }
-      //     // LD | REG_FP
-      //     if (op_rs == 1790 && signedGreaterThan(signExtend(immediate, 16), 0)) {
-      //       // TODO Search
-      //       var_pointer = malloc(4 * SIZEOFUINT64);
-      //       *var_pointer = (uint64_t) *(func_list + 5);
-      //       *(func_list + 5) = (uint64_t) var_pointer;
-      //       *(var_pointer + 1) = 1;
-      //       *(var_pointer + 2) = signExtend(immediate, 16);
-      //     }
-      //     pc = pc_saved;
-      //   }
-      // }
     } else if (opcode == OP_SD) {
       decodeIFormat();
       if (rs == REG_FP) {
@@ -6296,31 +6315,6 @@ void func_scan() {
           *(var_pointer + 2) = immediate;
         }
       }
-      // else if (rs > REG_A3) {
-      //   if (rs < REG_S0) {
-      //     pc_saved = pc;
-      //     rs_saved = rs;
-      //     pc = pc - INSTRUCTIONSIZE;
-      //     ir = loadInstruction(pc);
-      //     op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
-      //     decodeIFormat();
-      //     while ((op_rs == 1788 || op_rs == 1790) && rt == rs_saved) {
-      //       pc = pc - INSTRUCTIONSIZE;
-      //       ir = loadInstruction(pc);
-      //       op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
-      //       decodeIFormat();
-      //     }
-      //     if (op_rs == 1790 && signedGreaterThan(signExtend(immediate, 16), 0)) {
-      //       // TODO Search
-      //       var_pointer = malloc(4 * SIZEOFUINT64);
-      //       *var_pointer = (uint64_t) *(func_list + 5);
-      //       *(func_list + 5) = (uint64_t) var_pointer;
-      //       *(var_pointer + 1) = 1;
-      //       *(var_pointer + 2) = immediate;
-      //     }
-      //     pc = pc_saved;
-      //   }
-      // }
     } else if (opcode == OP_JAL) { // recursive
       decodeJFormat();
       if (*(func_list + 1) == (instr_index * INSTRUCTIONSIZE)) {
@@ -6454,45 +6448,6 @@ void selfie_inliner() {
         }
       }
     }
-    // else if (opcode == OP_JAL) {
-    //   decodeJFormat();
-    //   entry = searchFuncTable(instr_index * INSTRUCTIONSIZE);
-    //   if (entry != (uint64_t*) 0) {
-    //     params = *(entry + 2);
-    //     cnt = 0;
-    //     pc_saved = pc;
-    //     while (cnt < params) {
-    //       pc = pc - INSTRUCTIONSIZE;
-    //       ir = loadInstruction(pc);
-    //       op_rs = rightShift(leftShift(instruction, 32), 32);
-    //       while (op_rs != 1740505072) {
-    //         pc = pc - INSTRUCTIONSIZE;
-    //         ir = loadInstruction(pc);
-    //         op_rs = rightShift(leftShift(instruction, 32), 32);
-    //       }
-    //       pc = pc - INSTRUCTIONSIZE;
-    //       ir = loadInstruction(pc);
-    //       op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
-    //       if (op_rs == 1790 || op_rs == 1788) {
-    //         formalparam = searchParlist(entry, cnt * REGISTERSIZE + 16);
-    //         actualparam = malloc(4 * SIZEOFUINT64);
-    //         *actualparam = (uint64_t) call_list;
-    //         call_list = actualparam;
-    //         if (formalparam != (uint64_t*)0) {
-    //           *(actualparam + 1) = *(formalparam + 1);
-    //           *(actualparam + 2) = *(formalparam + 2);
-    //           *(actualparam + 3) = signExtend(immediate, 16);
-    //         } else {
-    //           *(actualparam + 1) = 0;
-    //           *(actualparam + 2) = cnt * REGISTERSIZE + 16;
-    //           *(actualparam + 3) = signExtend(immediate, 16);
-    //         }
-    //       }
-    //       cnt = cnt + 1;
-    //     }
-    //   }
-    //   pc = pc_saved;
-    // }
 
     pc = pc + INSTRUCTIONSIZE;
   }
@@ -6574,7 +6529,7 @@ void selfie_inliner() {
           // preprocess of parameters
           cnt = 0;
           tmp = 0;
-          func = searchCallerFunction(func_list, pc);
+          func = searchCallerFunction(pc);
           locals = (*(func + 3)) * REGISTERSIZE;
           while (cnt < params) {
             actualparam = (uint64_t*) *(call_list + (params-cnt-1));
