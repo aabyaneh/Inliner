@@ -5821,22 +5821,7 @@ void op_sd() {
 void op_del() {
   // uint64_t vaddr;
   // uint64_t tmp;
-  //
-  // if (debug) {
-  //   printOpcode(opcode);
-  //   print((uint64_t*) " ");
-  //   printRegister(rt);
-  //   print((uint64_t*) ",");
-  //   printInteger(signExtend(immediate, 16));
-  //   print((uint64_t*) "(");
-  //   printRegister(rs);
-  //   print((uint64_t*) ")");
-  //   println();
-  // }
-
-  // if (interpret)
-  //   pc = pc + INSTRUCTIONSIZE;
-
+  
   if (debug) {
     printOpcode(opcode);
     print((uint64_t*) " ");
@@ -5846,34 +5831,49 @@ void op_del() {
     print((uint64_t*) "(");
     printRegister(rs);
     print((uint64_t*) ")");
-    if (interpret) {
-      print((uint64_t*) ": ");
-      printRegister(rt);
-      print((uint64_t*) "=");
-      printInteger(*(registers+rt));
-      print((uint64_t*) ",");
-      printRegister(rs);
-      print((uint64_t*) "=");
-      printHexadecimal(*(registers+rs), 0);
-    }
-  }
-
-  if (interpret) {
-    pc = pc + INSTRUCTIONSIZE;
-  }
-
-  if (debug) {
-    if (interpret) {
-      print((uint64_t*) " -> ");
-      printRegister(rt);
-      print((uint64_t*) "=");
-      printInteger(*(registers+rt));
-      print((uint64_t*) "=memory[");
-      printHexadecimal(vaddr, 0);
-      print((uint64_t*) "]");
-    }
     println();
   }
+
+  if (interpret)
+    pc = pc + INSTRUCTIONSIZE;
+
+  // if (debug) {
+  //   printOpcode(opcode);
+  //   print((uint64_t*) " ");
+  //   printRegister(rt);
+  //   print((uint64_t*) ",");
+  //   printInteger(signExtend(immediate, 16));
+  //   print((uint64_t*) "(");
+  //   printRegister(rs);
+  //   print((uint64_t*) ")");
+  //   if (interpret) {
+  //     print((uint64_t*) ": ");
+  //     printRegister(rt);
+  //     print((uint64_t*) "=");
+  //     printInteger(*(registers+rt));
+  //     print((uint64_t*) ",");
+  //     printRegister(rs);
+  //     print((uint64_t*) "=");
+  //     printHexadecimal(*(registers+rs), 0);
+  //   }
+  // }
+  //
+  // if (interpret) {
+  //   pc = pc + INSTRUCTIONSIZE;
+  // }
+  //
+  // if (debug) {
+  //   if (interpret) {
+  //     print((uint64_t*) " -> ");
+  //     printRegister(rt);
+  //     print((uint64_t*) "=");
+  //     printInteger(*(registers+rt));
+  //     print((uint64_t*) "=memory[");
+  //     printHexadecimal(vaddr, 0);
+  //     print((uint64_t*) "]");
+  //   }
+  //   println();
+  // }
 }
 
 void op_beq() {
