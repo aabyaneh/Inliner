@@ -6242,7 +6242,7 @@ uint64_t* searchParlist(uint64_t* entry, uint64_t offset) {
 
   par_entry = *(entry + 5);
   while (par_entry != (uint64_t*) 0) {
-    if (*(par_entry + 2) == offest)
+    if (*(par_entry + 2) == offset)
       return par_entry;
 
     par_entry = *par_entry;
@@ -6274,31 +6274,31 @@ void func_scan() {
   uint64_t pc_saved;
   uint64_t rs_saved;
   uint64_t* var_pointer;
-  uint64_t op_re;
+  uint64_t op_rs;
 
   reg_max = 0;
   ir = loadInstruction(pc);
-  op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
+  op_rs = rightShift(leftShift(ir, 32), 21 + 32);
   counter = 0;
   // until daddiu $sp,$fp,0
   while (op_rs != 830) {
     opcode = getOpcode(ir);
 
     if (opcode == 0) {
-      rd = getRD();
+      rd = getRD(ir);
       if (rd > reg_max) {
         if (rd < REG_S0)
           reg_max = rd;
       }
     } else if (opcode == OP_DADDIU) {
-      rt = getRT();
+      rt = getRT(ir);
       if (rt > reg_max)
         if (rt < REG_S0) {
           reg_max = rt;
         }
     } else if (opcode == OP_LD) {
       // decodeIFormat();
-      rt = getRT();
+      rt = getRT(ir);
       if (rt > reg_max) {
         if (rt < REG_S0) {
           reg_max = rt;
@@ -6325,7 +6325,7 @@ void func_scan() {
     counter = counter + 1;
     pc = pc + INSTRUCTIONSIZE;
     ir = loadInstruction(pc);
-    op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
+    op_rs = rightShift(leftShift(ir, 32), 21 + 32);
   }
 
   *(func_list + 4) = reg_max;
@@ -6474,15 +6474,15 @@ void selfie_inliner() {
           while (cnt < params) {
             pc = pc - INSTRUCTIONSIZE;
             ir = loadInstruction(pc);
-            op_rs = rightShift(leftShift(instruction, 32), 32);
+            op_rs = rightShift(leftShift(ir, 32), 32);
             while (op_rs != 1740505072) {
               pc = pc - INSTRUCTIONSIZE;
               ir = loadInstruction(pc);
-              op_rs = rightShift(leftShift(instruction, 32), 32);
+              op_rs = rightShift(leftShift(ir, 32), 32);
             }
             pc = pc - INSTRUCTIONSIZE;
             ir = loadInstruction(pc);
-            op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
+            op_rs = rightShift(leftShift(ir, 32), 21 + 32);
             if (op_rs == 1790 || op_rs == 1788) {
               decodeIFormat();
               formalparam = searchParlist(entry, cnt * REGISTERSIZE + 16);
@@ -6543,7 +6543,7 @@ void selfie_inliner() {
           pc = (instr_index+5) * INSTRUCTIONSIZE;
           // if (*(entry + 3) > 0) later
           ir = loadInstruction(pc);
-          op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
+          op_rs = rightShift(leftShift(ir, 32), 21 + 32);
           // until daddiu $sp,$fp,0
           while (op_rs != 830) {
             decode();
@@ -6565,7 +6565,7 @@ void selfie_inliner() {
             pc_labeled = pc_labeled + 1;
             pc = pc + INSTRUCTIONSIZE;
             ir = loadInstruction(pc);
-            op_rs = rightShift(leftShift(instruction, 32), 21 + 32);
+            op_rs = rightShift(leftShift(ir, 32), 21 + 32);
           }
 
           // free parameters
@@ -7818,7 +7818,7 @@ uint64_t selfie() {
       } else if (stringCompare(option, (uint64_t*) "-o"))
         selfie_output();
       else if (stringCompare(option, (uint64_t*) "-s"))
-        selfie_disassemble();
+        selfie_inliner();
       else if (stringCompare(option, (uint64_t*) "-l"))
         selfie_load();
       else if (stringCompare(option, (uint64_t*) "-sat"))
