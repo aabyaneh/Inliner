@@ -6471,8 +6471,9 @@ void selfie_inliner() {
     if (opcode == OP_JAL) {
       decodeJFormat();
       entry = searchFuncTable(instr_index * INSTRUCTIONSIZE);
-      if (entry != (uint64_t*) 0 && first_JAL) {
-        if (*(entry + 6) == 1) {
+      if (entry != (uint64_t*) 0 && *(entry + 6) == 1 && first_JAL) {
+        //if (*(entry + 6) == 1)
+        {
           params = *(entry + 2);
           cnt = 0;
           pc_saved = pc;
@@ -6543,13 +6544,15 @@ void selfie_inliner() {
               actualparam = (uint64_t*) *(call_list + (params-cnt-1));
               if (*(actualparam + 1) == 1) {
                 tmp = tmp + 1;
-                *(actualparam + 3) = -(locals - (tmp * REGISTERSIZE));
+                *(actualparam + 3) = -(locals + (tmp * REGISTERSIZE));
               }
               cnt = cnt + 1;
             }
           }
 
           // to first inst of the function after prolog
+          ir = loadInstruction(pc_saved);
+          decode();
           pc = (instr_index+5) * INSTRUCTIONSIZE;
           // if (*(entry + 3) > 0) later
           ir = loadInstruction(pc);
@@ -6587,8 +6590,18 @@ void selfie_inliner() {
 
           pc = pc_saved;
         }
+      } else if (first_JAL == 1) {
+        labeled_inst = pc;
+        labeled_inst = leftShift(labeled_inst, 32) + ir;
+        *(binary_labeled + pc_labeled) = labeled_inst;
       }
-      first_JAL = 1;
+
+      if (first_JAL == 0) {
+        first_JAL = 1;
+        labeled_inst = pc;
+        labeled_inst = leftShift(labeled_inst, 32) + ir;
+        *(binary_labeled + pc_labeled) = labeled_inst;
+      }
 
     } else {
       labeled_inst = pc;
