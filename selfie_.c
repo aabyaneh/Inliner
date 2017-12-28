@@ -6352,6 +6352,8 @@ void selfie_inliner() {
   uint64_t labeled_inst;
   uint64_t tmp;
   uint64_t first_JAL;
+  uint64_t jump_pc;
+  uint64_t max_pc;
 
   assemblyName = getArgument();
 
@@ -6553,7 +6555,19 @@ void selfie_inliner() {
           // to first inst of the function after prolog
           ir = loadInstruction(pc_saved);
           decode();
-          pc = (instr_index+5) * INSTRUCTIONSIZE;
+
+          // insert a nop instead of jal; because of jumps to here
+          ir = encodeRFormat(OP_SPECIAL, 0, 0, 0, FCT_NOP);
+          //ir = encodeIFormat(6, 0, 0, 0);
+          labeled_inst = pc_saved;
+          labeled_inst = leftShift(labeled_inst, 32) + ir;
+          *(binary_labeled + pc_labeled) = labeled_inst;
+          pc_labeled = pc_labeled + 1;
+
+          pc = (instr_index+5) * INSTRUCTIONSIZE; // because no local for now
+
+          jump_pc = *(entry + 7) + max_pc; // to the inst after last (nop)
+
           // if (*(entry + 3) > 0) later
           ir = loadInstruction(pc);
           op_rs = rightShift(leftShift(ir, 32), 16 + 32);
@@ -6571,8 +6585,14 @@ void selfie_inliner() {
                   }
                 }
               }
+            } else if (opcode == OP_J) {
+              ir = encodeJFormat(opcode, jump_pc);
+            } else if (opcode == OP_BEQ) {
+              ir = encodeIFormat(opcode, rs, rt, signExtend(immediate, 16) + 1); // + max_pc
             }
-            labeled_inst = pc;
+
+            labeled_inst = max_pc;
+            max_pc = max_pc + 1;
             labeled_inst = leftShift(labeled_inst, 32) + ir;
             *(binary_labeled + pc_labeled) = labeled_inst;
             pc_labeled = pc_labeled + 1;
@@ -6581,16 +6601,24 @@ void selfie_inliner() {
             op_rs = rightShift(leftShift(ir, 32), 16 + 32);
           }
 
+          // insert a nop after all
+          ir = encodeRFormat(OP_SPECIAL, 0, 0, 0, FCT_NOP);
+          labeled_inst = max_pc;
+          max_pc = max_pc + 1;
+          labeled_inst = leftShift(labeled_inst, 32) + ir;
+          *(binary_labeled + pc_labeled) = labeled_inst;
+
           // free parameters
           if (tmp > 0) {
             ir = encodeIFormat(OP_DADDIU, REG_SP, REG_SP, tmp * REGISTERSIZE);
             labeled_inst = ir;
+            pc_labeled = pc_labeled + 1;
             *(binary_labeled + pc_labeled) = labeled_inst;
           }
 
           pc = pc_saved;
         }
-      } else if (first_JAL == 1) {
+      } else {
         labeled_inst = pc;
         labeled_inst = leftShift(labeled_inst, 32) + ir;
         *(binary_labeled + pc_labeled) = labeled_inst;
@@ -6598,9 +6626,6 @@ void selfie_inliner() {
 
       if (first_JAL == 0) {
         first_JAL = 1;
-        labeled_inst = pc;
-        labeled_inst = leftShift(labeled_inst, 32) + ir;
-        *(binary_labeled + pc_labeled) = labeled_inst;
       }
 
     } else {
