@@ -4332,6 +4332,8 @@ void decode() {
     decodeJFormat();
   else if (opcode == OP_J)
     decodeJFormat();
+  else if (opcode == 1)
+    decodeJFormat();
   else
     decodeIFormat();
 }
@@ -5701,6 +5703,64 @@ void op_daddiu() {
   }
 }
 
+void op_del() {
+
+  if (debug) {
+    print((uint64_t*) "del");
+    print((uint64_t*) " ");
+    printRegister(rt);
+    print((uint64_t*) ",");
+    printInteger(signExtend(immediate, 16));
+    print((uint64_t*) "(");
+    printRegister(rs);
+    print((uint64_t*) ")");
+    println();
+  }
+
+  if (interpret)
+    pc = pc + INSTRUCTIONSIZE;
+
+}
+
+void op_sep() {
+
+  if (debug) {
+    print((uint64_t*) "sep");
+    print((uint64_t*) " ");
+    printRegister(rt);
+    print((uint64_t*) ",");
+    printInteger(signExtend(immediate, 16));
+    print((uint64_t*) "(");
+    printRegister(rs);
+    print((uint64_t*) ")");
+    println();
+  }
+
+  if (interpret)
+    pc = pc + INSTRUCTIONSIZE;
+
+}
+
+void op_ji() {
+
+  if (debug) {
+    print((uint64_t*) "ji");
+    print((uint64_t*) " ");
+    printHexadecimal(instr_index, 0);
+    print((uint64_t*) "[");
+    printHexadecimal(instr_index * INSTRUCTIONSIZE, 0);
+    print((uint64_t*) "]");
+    println();
+  }
+
+  if (interpret) {
+    pc = instr_index * INSTRUCTIONSIZE;
+
+    // TODO: execute delay slot
+  }
+
+}
+
 void op_ld() {
   uint64_t vaddr;
 
@@ -6026,6 +6086,12 @@ void execute() {
     op_jal();
   else if (opcode == OP_J)
     op_j();
+  else if (opcode == 5)
+    op_del();
+  else if (opcode == 6)
+    op_sep();
+  else if (opcode == 1)
+    op_ji();
   else
     throwException(EXCEPTION_UNKNOWNINSTRUCTION, 0);
 }
@@ -6266,10 +6332,11 @@ uint64_t* searchCallerFunction(uint64_t pc) {
 
   entry = func_list;
   while (entry != (uint64_t*) 0) {
-    tmp = *(entry + 1) + (*(entry + 7) + 11) * INSTRUCTIONSIZE;
+    tmp = *(entry + 1) + (*(entry + 7) + 11) * 4;
     if (pc > *(entry + 1))
-      if (pc < tmp)
+      if (pc < tmp) {
         return entry;
+      }
 
     entry = (uint64_t*) *entry;
   }
@@ -6299,8 +6366,6 @@ void searchLabel(uint64_t lab, uint64_t pc_labeled) {
 
     entry = (uint64_t*) *entry;
   }
-
-  //return (uint64_t*) 0;
 }
 
 void func_scan() {
@@ -6315,6 +6380,7 @@ void func_scan() {
   ir = loadInstruction(pc);
   op_rs = rightShift(leftShift(ir, 32), 16 + 32);
   counter = 0;
+
   // until daddiu $sp,$fp,0
   while (op_rs != 26589) {
     opcode = getOpcode(ir);
@@ -6386,36 +6452,9 @@ void selfie_inliner() {
   uint64_t labeled_inst;
   uint64_t tmp;
   uint64_t first_JAL;
+  uint64_t* label;
   uint64_t jump_pc;
   uint64_t max_pc;
-  uint64_t* label;
-
-  assemblyName = getArgument();
-
-  if (codeLength == 0) {
-    print(selfieName);
-    print((uint64_t*) ": nothing to disassemble to output file ");
-    print(assemblyName);
-    println();
-
-    return;
-  }
-
-  // assert: assemblyName is mapped and not longer than maxFilenameLength
-
-  assemblyFD = openWriteOnly(assemblyName);
-
-  if (signedLessThan(assemblyFD, 0)) {
-    print(selfieName);
-    print((uint64_t*) ": could not create assembly output file ");
-    print(assemblyName);
-    println();
-
-    exit(EXITCODE_IOERROR);
-  }
-
-  outputName = assemblyName;
-  outputFD   = assemblyFD;
 
   interpret = 0;
 
@@ -6426,16 +6465,6 @@ void selfie_inliner() {
 
   // for labeled binary creation
   binary_labeled = malloc(10 * maxBinaryLength);
-  // while(pc < codeLength) {
-  //   ir = loadInstruction(pc);
-  //   labeled_inst = pc;
-  //   labeled_inst = leftShift(labeled_inst, 32) + ir;
-  //   *(binary_labeled + (pc/INSTRUCTIONSIZE)) = labeled_inst;
-  //   pc = pc + INSTRUCTIONSIZE;
-  // }
-
-  // resetLibrary();
-  // resetInterpreter();
 
   // for functions analysis
   while(pc < codeLength) {
@@ -6454,6 +6483,7 @@ void selfie_inliner() {
           *(func + 4) = 0;
           *(func + 5) = 0;
           *(func + 6) = 0;
+          *(func + 7) = 0;
           *func = (uint64_t) func_list;
           func_list = func;
           *(func + 1) = pc - INSTRUCTIONSIZE;
@@ -6485,6 +6515,16 @@ void selfie_inliner() {
               if (rs == REG_SP) {
                 params = (signExtend(immediate, 16) / REGISTERSIZE) - 1;
                 *(func + 2) = params;
+              } else {
+                printHexadecimal(pc,0);
+                print((uint64_t*) " :");
+                printInteger(opcode);
+                print((uint64_t*) " :");
+                printInteger(rt);
+                print((uint64_t*) " :");
+                printInteger(rs);
+                println();
+                exit(-1);
               }
             }
           }
@@ -6510,7 +6550,7 @@ void selfie_inliner() {
       decodeJFormat();
       entry = searchFuncTable(instr_index * INSTRUCTIONSIZE);
       if (entry != (uint64_t*) 0 && *(entry + 6) == 1 && first_JAL) {
-        //if (*(entry + 6) == 1)
+        //if (*(entry + 6) == 1) {
         {
           params = *(entry + 2);
           cnt = 0;
@@ -6522,10 +6562,12 @@ void selfie_inliner() {
               pc = pc - INSTRUCTIONSIZE;
               ir = loadInstruction(pc);
               op_rs = ir;//rightShift(leftShift(ir, 32), 32);
+              //op_rs = encodeIFormat(25, REG_SP, REG_SP, -REGISTERSIZE);
               while (op_rs != 1740505080) {
                 pc = pc - INSTRUCTIONSIZE;
                 ir = loadInstruction(pc);
                 op_rs = ir;//rightShift(leftShift(ir, 32), 32);
+                //op_rs = encodeIFormat(25, REG_SP, REG_SP, -REGISTERSIZE);
               }
               pc = pc - INSTRUCTIONSIZE;
               ir = loadInstruction(pc);
@@ -6600,7 +6642,7 @@ void selfie_inliner() {
           *(binary_labeled + pc_labeled) = labeled_inst;
           pc_labeled = pc_labeled + 1;
 
-          pc = (instr_index+5) * INSTRUCTIONSIZE; // because no local for now
+          pc = (instr_index+5) * INSTRUCTIONSIZE; // because no local
 
           jump_pc = (*(entry + 7) * INSTRUCTIONSIZE) + max_pc; // to the inst after last (nop)
 
@@ -6646,14 +6688,17 @@ void selfie_inliner() {
 
           // free parameters
           if (tmp > 0) {
-            ir = encodeIFormat(OP_DADDIU, REG_SP, REG_SP, tmp * REGISTERSIZE);
-            labeled_inst = ir;
             pc_labeled = pc_labeled + 1;
+            ir = encodeIFormat(OP_DADDIU, REG_SP, REG_SP, tmp * REGISTERSIZE);
+            labeled_inst = 0;
+            labeled_inst = leftShift(labeled_inst, 32) + ir;
             *(binary_labeled + pc_labeled) = labeled_inst;
           }
+          ////
 
           pc = pc_saved;
         }
+
       } else {
         labeled_inst = pc;
         labeled_inst = leftShift(labeled_inst, 32) + ir;
@@ -6672,6 +6717,106 @@ void selfie_inliner() {
 
     pc = pc + INSTRUCTIONSIZE;
     pc_labeled = pc_labeled + 1;
+  }
+
+  //////////////////////////// eliminate del instructions
+  codeLength = pc_labeled;
+  pc_labeled = 0;
+  pc = 0;
+  binary = malloc(10 * maxBinaryLength);
+  while(pc_labeled < codeLength) {
+    ir = *(binary_labeled + pc_labeled);
+    opcode = rightShift(leftShift(ir, 32), 32 + 26);
+
+    if (opcode != 5) {
+      *(binary + pc) = ir;
+      pc = pc + 1;
+    }
+
+    pc_labeled = pc_labeled + 1;
+  }
+  codeLength = pc;
+
+  ///////////////////////////////// scanning jump labels
+  pc_labeled = 0;
+  binary_labeled = binary;
+  while(pc_labeled < codeLength) {
+    ir = *(binary_labeled + pc_labeled);
+    pc = rightShift(ir, 32);
+    ir = rightShift(leftShift(ir, 32), 32);
+
+    decode();
+
+    if (opcode == OP_JAL) {
+      label = malloc(3 * SIZEOFUINT64);
+      *label = (uint64_t) labels;
+      labels = label;
+      *(label + 1) = instr_index * INSTRUCTIONSIZE;
+      *(label + 2) = pc_labeled;
+    } else if (opcode == OP_BEQ) {
+      label = malloc(3 * SIZEOFUINT64);
+      *label = (uint64_t) labels;
+      labels = label;
+      *(label + 1) = pc + (signExtend(immediate, 16) + 1) * INSTRUCTIONSIZE;
+      *(label + 2) = pc_labeled;
+    } else if (opcode == OP_J) {
+      label = malloc(3 * SIZEOFUINT64);
+      *label = (uint64_t) labels;
+      labels = label;
+      *(label + 1) = instr_index * INSTRUCTIONSIZE;
+      *(label + 2) = pc_labeled;
+    } else if (opcode == 1) {
+      label = malloc(3 * SIZEOFUINT64);
+      *label = (uint64_t) labels;
+      labels = label;
+      *(label + 1) = instr_index;
+      *(label + 2) = pc_labeled;
+    }
+
+    pc_labeled = pc_labeled + 1;
+  }
+
+  /////////////////////////////////  replacing labels
+  pc_labeled = 0;
+  while(pc_labeled < codeLength) {
+    ir = *(binary_labeled + pc_labeled);
+    pc = rightShift(ir, 32);
+
+    searchLabel(pc, pc_labeled);
+
+    pc_labeled = pc_labeled + 1;
+  }
+  /////////////////////////////////
+
+  resetLibrary();
+  resetInterpreter();
+
+  assemblyName = getArgument();
+  // assert: assemblyName is mapped and not longer than maxFilenameLength
+  assemblyFD = openWriteOnly(assemblyName);
+  if (signedLessThan(assemblyFD, 0)) {
+    print(selfieName);
+    print((uint64_t*) ": could not create assembly output file ");
+    print(assemblyName);
+    println();
+
+    exit(EXITCODE_IOERROR);
+  }
+  outputName = assemblyName;
+  outputFD   = assemblyFD;
+
+  //print assembly
+  pc_labeled = 0;
+  while(pc_labeled < codeLength) {
+    ir = *(binary_labeled + pc_labeled);
+    //pc = rightShift(ir, 32);
+    ir = rightShift(leftShift(ir, 32), 32);
+
+    decode();
+    execute();
+
+    pc_labeled = pc_labeled + 1;
+    pc = pc + INSTRUCTIONSIZE;
   }
 
   debug = 0;
