@@ -6224,6 +6224,14 @@ uint64_t* call_list;
 
 uint64_t* binary_labeled;
 
+uint64_t* labels;
+
+// +----+-----------+
+// |  0 | next      | pointer to next
+// |  1 | label     |
+// |  2 | new_pc    |
+// +----+-----------+
+
 uint64_t* searchFuncTable(uint64_t func_pc) {
   uint64_t* entry;
 
@@ -6267,6 +6275,32 @@ uint64_t* searchCallerFunction(uint64_t pc) {
   }
 
   return (uint64_t*) 0;
+}
+
+void searchLabel(uint64_t lab, uint64_t pc_labeled) {
+  uint64_t* entry;
+
+  entry = labels;
+  while (entry != (uint64_t*) 0) {
+    if (*(entry + 1) == lab) {
+
+      ir = *(binary_labeled + *(entry + 2));
+      ir = rightShift(leftShift(ir, 32), 32);
+      decode();
+      if (opcode == OP_JAL || opcode == OP_J) {
+        *(binary_labeled + *(entry + 2)) = encodeJFormat(opcode, pc_labeled);
+      } else if (opcode == OP_BEQ) {
+        *(binary_labeled + *(entry + 2)) = encodeIFormat(opcode, rs, rt, pc_labeled - *(entry + 2) - 1);
+      } else if (opcode == 1) {
+        *(binary_labeled + *(entry + 2)) = encodeJFormat(OP_J, pc_labeled);
+      }
+
+    }
+
+    entry = (uint64_t*) *entry;
+  }
+
+  //return (uint64_t*) 0;
 }
 
 void func_scan() {
@@ -6354,6 +6388,7 @@ void selfie_inliner() {
   uint64_t first_JAL;
   uint64_t jump_pc;
   uint64_t max_pc;
+  uint64_t* label;
 
   assemblyName = getArgument();
 
@@ -6460,6 +6495,7 @@ void selfie_inliner() {
     pc = pc + INSTRUCTIONSIZE;
   }
 
+  max_pc = pc;
 
   resetLibrary();
   resetInterpreter();
@@ -6566,7 +6602,7 @@ void selfie_inliner() {
 
           pc = (instr_index+5) * INSTRUCTIONSIZE; // because no local for now
 
-          jump_pc = *(entry + 7) + max_pc; // to the inst after last (nop)
+          jump_pc = (*(entry + 7) * INSTRUCTIONSIZE) + max_pc; // to the inst after last (nop)
 
           // if (*(entry + 3) > 0) later
           ir = loadInstruction(pc);
@@ -6586,13 +6622,13 @@ void selfie_inliner() {
                 }
               }
             } else if (opcode == OP_J) {
-              ir = encodeJFormat(opcode, jump_pc);
+              ir = encodeJFormat(1, jump_pc);
             } else if (opcode == OP_BEQ) {
-              ir = encodeIFormat(opcode, rs, rt, signExtend(immediate, 16) + 1); // + max_pc
+              ir = encodeIFormat(opcode, rs, rt, signExtend(immediate, 16)); // + 1 + max_pc
             }
 
             labeled_inst = max_pc;
-            max_pc = max_pc + 1;
+            max_pc = max_pc + INSTRUCTIONSIZE;
             labeled_inst = leftShift(labeled_inst, 32) + ir;
             *(binary_labeled + pc_labeled) = labeled_inst;
             pc_labeled = pc_labeled + 1;
@@ -6604,7 +6640,7 @@ void selfie_inliner() {
           // insert a nop after all
           ir = encodeRFormat(OP_SPECIAL, 0, 0, 0, FCT_NOP);
           labeled_inst = max_pc;
-          max_pc = max_pc + 1;
+          max_pc = max_pc + INSTRUCTIONSIZE;
           labeled_inst = leftShift(labeled_inst, 32) + ir;
           *(binary_labeled + pc_labeled) = labeled_inst;
 
