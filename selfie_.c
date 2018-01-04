@@ -4628,7 +4628,7 @@ void selfie_load() {
     exit(EXITCODE_IOERROR);
   }
 
-  // maxBinaryLength = 10 * maxBinaryLength;
+  //maxBinaryLength = 10 * maxBinaryLength;
 
   // make sure binary is mapped
   binary = touch(smalloc(maxBinaryLength), maxBinaryLength);
@@ -6317,6 +6317,8 @@ uint64_t* labels;
 // |  2 | new_pc    |
 // +----+-----------+
 
+uint64_t* del_list;
+
 uint64_t* searchFuncTable(uint64_t func_pc) {
   uint64_t* entry;
 
@@ -6394,6 +6396,20 @@ void searchLabel(uint64_t lab, uint64_t pc_labeled) {
   }
 
   //return (uint64_t*) 0;
+}
+
+uint64_t* searchDels (uint64_t lab) {
+  uint64_t* entry;
+
+  entry = del_list;
+  while (entry != (uint64_t*) 0) {
+    if (*(entry + 1) == lab) {
+      return entry;
+    }
+    entry = *(entry);
+  }
+
+  return (uint64_t*) 0;
 }
 
 uint64_t* searchCalls (uint64_t* entry, uint64_t lab) {
@@ -6508,7 +6524,7 @@ void func_scan() {
   *(func_list + 4) = reg_max;
   *(func_list + 7) = counter;
 
-  if (counter < 31 && *(func_list + 3) == 0 && *(func_list + 6) != 2)
+  if (counter < 20 && *(func_list + 3) == 0 && *(func_list + 6) != 2)
     *(func_list + 6) = 1;
   else
     *(func_list + 6) = 0;
@@ -6534,6 +6550,8 @@ void selfie_inliner() {
   uint64_t savedBinaryLength;
   uint64_t fd;
   uint64_t* caller;
+
+  del_list = (uint64_t*) 0;
 
   savedcodeLength = codeLength;
   savedBinaryLength = binaryLength;
@@ -6566,6 +6584,7 @@ void selfie_inliner() {
   while(pc < codeLength) {
     ir = loadInstruction(pc);
     opcode = getOpcode(ir);
+    decode();
 
     // sd $ra,0($sp)
     if (opcode == OP_SD) {
@@ -6825,12 +6844,21 @@ void selfie_inliner() {
                   // printHexadecimal(ir,0);
                   // println();
                 }
+                // //tmp = rightShift(*(binary_labeled + labeled_inst + 3), 32);
+                // label = malloc(3 * SIZEOFUINT64);
+                // *label = (uint64_t) del_list;
+                // del_list = label;
+                // *(label + 1) = ir;
+                // *(label + 2) = pc_saved;
+                tmp = leftShift(pc, 32);
                 ir = encodeIFormat(5, 0, 0, 0);
-                *(binary_labeled + labeled_inst) = ir;
+                *(binary_labeled + labeled_inst) = tmp + ir;
                 labeled_inst = labeled_inst + 1;
-                *(binary_labeled + labeled_inst) = ir;
+                tmp = leftShift(pc+INSTRUCTIONSIZE, 32);
+                *(binary_labeled + labeled_inst) = tmp + ir;
                 labeled_inst = labeled_inst + 1;
-                *(binary_labeled + labeled_inst) = ir;
+                tmp = leftShift(pc + 2*INSTRUCTIONSIZE, 32);
+                *(binary_labeled + labeled_inst) = tmp + ir;
 
                 // tmp = pc_labeled - (pc_saved-pc)/INSTRUCTIONSIZE;
                 // ir = encodeIFormat(5, 0, 0, 0);
@@ -7085,24 +7113,24 @@ void selfie_inliner() {
 
   //////////////////////////// eliminate del
   codeLength = pc_labeled;
-  pc_labeled = 0;
-  pc = 0;
-  binary_ = malloc(10 * maxBinaryLength);
-  while(pc_labeled < codeLength) {
-    ir = *(binary_labeled + pc_labeled);
-    opcode = rightShift(leftShift(ir, 32), 32 + 26);
-
-    if (opcode != 5) {
-      *(binary_ + pc) = ir;
-      pc = pc + 1;
-    }
-
-    pc_labeled = pc_labeled + 1;
-  }
-  codeLength = pc;
+  // pc_labeled = 0;
+  // pc = 0;
+  // binary_ = malloc(10 * maxBinaryLength);
+  // while(pc_labeled < codeLength) {
+  //   ir = *(binary_labeled + pc_labeled);
+  //   opcode = rightShift(leftShift(ir, 32), 32 + 26);
+  //
+  //   if (opcode != 5) {
+  //     *(binary_ + pc) = ir;
+  //     pc = pc + 1;
+  //   }
+  //
+  //   pc_labeled = pc_labeled + 1;
+  // }
+  // codeLength = pc;
   ///////////////////////////////// labeling
   pc_labeled = 0;
-  binary_labeled = binary_;
+  // binary_labeled = binary_;
   while(pc_labeled < codeLength) {
     ir = *(binary_labeled + pc_labeled);
     pc = rightShift(ir, 32);
@@ -7128,6 +7156,9 @@ void selfie_inliner() {
       labels = label;
       *(label + 1) = pc + (signExtend(immediate, 16) + 1) * INSTRUCTIONSIZE;
       *(label + 2) = pc_labeled;
+      // label = searchDels(*(label + 1));
+      // if (label != (uint64_t*)0)
+      //   *(labels + 1) = *(label + 2);
     } else if (opcode == OP_J) {
       label = malloc(3 * SIZEOFUINT64);
       *label = (uint64_t) labels;
@@ -7260,7 +7291,7 @@ void selfie_inliner() {
   // pc_labeled = 0;
   // while(pc_labeled < codeLength) {
   //   ir = *(binary_labeled + pc_labeled);
-  //   //pc = rightShift(ir, 32);
+  //   pc = rightShift(ir, 32);
   //   ir = rightShift(leftShift(ir, 32), 32);
   //
   //   //ir = loadInstruction(pc);
@@ -7269,7 +7300,7 @@ void selfie_inliner() {
   //   execute();
   //
   //   pc_labeled = pc_labeled + 1;
-  //   pc = pc + INSTRUCTIONSIZE;
+  //   //pc = pc + INSTRUCTIONSIZE;
   // }
   //
   // debug = 0;
