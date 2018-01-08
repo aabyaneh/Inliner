@@ -6524,7 +6524,7 @@ void func_scan() {
   *(func_list + 4) = reg_max;
   *(func_list + 7) = counter;
 
-  if (counter < 20 && *(func_list + 3) == 0 && *(func_list + 6) != 2)
+  if (counter < 21 && *(func_list + 3) == 0 && *(func_list + 6) != 2)
     *(func_list + 6) = 1;
   else
     *(func_list + 6) = 0;
@@ -6852,6 +6852,7 @@ void selfie_inliner() {
                 // *(label + 2) = pc_saved;
                 tmp = leftShift(pc, 32);
                 ir = encodeIFormat(5, 0, 0, 0);
+                //ir = encodeRFormat(OP_SPECIAL, 0, 0, 0, FCT_NOP);
                 *(binary_labeled + labeled_inst) = tmp + ir;
                 labeled_inst = labeled_inst + 1;
                 tmp = leftShift(pc+INSTRUCTIONSIZE, 32);
@@ -7130,7 +7131,7 @@ void selfie_inliner() {
   // codeLength = pc;
   ///////////////////////////////// labeling
   pc_labeled = 0;
-  // binary_labeled = binary_;
+  //binary_labeled = binary_;
   while(pc_labeled < codeLength) {
     ir = *(binary_labeled + pc_labeled);
     pc = rightShift(ir, 32);
@@ -7156,9 +7157,9 @@ void selfie_inliner() {
       labels = label;
       *(label + 1) = pc + (signExtend(immediate, 16) + 1) * INSTRUCTIONSIZE;
       *(label + 2) = pc_labeled;
-      // label = searchDels(*(label + 1));
-      // if (label != (uint64_t*)0)
-      //   *(labels + 1) = *(label + 2);
+      label = searchDels(*(label + 1));
+      if (label != (uint64_t*)0)
+        *(labels + 1) = *(label + 2);
     } else if (opcode == OP_J) {
       label = malloc(3 * SIZEOFUINT64);
       *label = (uint64_t) labels;
