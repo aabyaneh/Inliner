@@ -6550,6 +6550,7 @@ void selfie_inliner() {
   uint64_t savedBinaryLength;
   uint64_t fd;
   uint64_t* caller;
+  uint64_t num;
 
   del_list = (uint64_t*) 0;
 
@@ -6577,8 +6578,77 @@ void selfie_inliner() {
   // resetLibrary();
   // resetInterpreter();
 
-  // print((uint64_t*) "THIS***5");
-  // println();
+  func = malloc(3 * SIZEOFUINT64STAR + 6 * SIZEOFUINT64);
+  *(func + 2) = 1;
+  *(func + 3) = 0;
+  *(func + 4) = 0;
+  *(func + 5) = 0;
+  *(func + 6) = 0;
+  *(func + 7) = 0;
+  *(func + 8) = 0;
+  *func = (uint64_t) func_list;
+  func_list = func;
+  *(func + 1) = 224;
+  ////
+  func = malloc(3 * SIZEOFUINT64STAR + 6 * SIZEOFUINT64);
+  *(func + 2) = 3;
+  *(func + 3) = 0;
+  *(func + 4) = 0;
+  *(func + 5) = 0;
+  *(func + 6) = 0;
+  *(func + 7) = 0;
+  *(func + 8) = 0;
+  *func = (uint64_t) func_list;
+  func_list = func;
+  *(func + 1) = 240;
+  ////
+  func = malloc(3 * SIZEOFUINT64STAR + 6 * SIZEOFUINT64);
+  *(func + 2) = 3;
+  *(func + 3) = 0;
+  *(func + 4) = 0;
+  *(func + 5) = 0;
+  *(func + 6) = 0;
+  *(func + 7) = 0;
+  *(func + 8) = 0;
+  *func = (uint64_t) func_list;
+  func_list = func;
+  *(func + 1) = 280;
+  ////
+  func = malloc(3 * SIZEOFUINT64STAR + 6 * SIZEOFUINT64);
+  *(func + 2) = 3;
+  *(func + 3) = 0;
+  *(func + 4) = 0;
+  *(func + 5) = 0;
+  *(func + 6) = 0;
+  *(func + 7) = 0;
+  *(func + 8) = 0;
+  *func = (uint64_t) func_list;
+  func_list = func;
+  *(func + 1) = 320;
+  ////
+  func = malloc(3 * SIZEOFUINT64STAR + 6 * SIZEOFUINT64);
+  *(func + 2) = 1;
+  *(func + 3) = 0;
+  *(func + 4) = 0;
+  *(func + 5) = 0;
+  *(func + 6) = 0;
+  *(func + 7) = 0;
+  *(func + 8) = 0;
+  *func = (uint64_t) func_list;
+  func_list = func;
+  *(func + 1) = 360;
+  ////
+  func = malloc(3 * SIZEOFUINT64STAR + 6 * SIZEOFUINT64);
+  *(func + 2) = 2;
+  *(func + 3) = 0;
+  *(func + 4) = 0;
+  *(func + 5) = 0;
+  *(func + 6) = 0;
+  *(func + 7) = 0;
+  *(func + 8) = 0;
+  *func = (uint64_t) func_list;
+  func_list = func;
+  *(func + 1) = 384;
 
   // for functions analysis
   while(pc < codeLength) {
@@ -6851,8 +6921,8 @@ void selfie_inliner() {
                 // *(label + 1) = ir;
                 // *(label + 2) = pc_saved;
                 tmp = leftShift(pc, 32);
-                ir = encodeIFormat(5, 0, 0, 0);
-                //ir = encodeRFormat(OP_SPECIAL, 0, 0, 0, FCT_NOP);
+                //ir = encodeIFormat(5, 0, 0, 0); //del
+                ir = encodeRFormat(OP_SPECIAL, 0, 0, 0, FCT_NOP);
                 *(binary_labeled + labeled_inst) = tmp + ir;
                 labeled_inst = labeled_inst + 1;
                 tmp = leftShift(pc+INSTRUCTIONSIZE, 32);
@@ -6941,8 +7011,8 @@ void selfie_inliner() {
           decode();
 
           // insert a nop instead of jal; because of jumps to here
-          //ir = encodeRFormat(OP_SPECIAL, 0, 0, 0, FCT_NOP);
-          ir = encodeJFormat(6, instr_index);
+          ir = encodeRFormat(OP_SPECIAL, 0, 0, 0, FCT_NOP);
+          //ir = encodeJFormat(6, instr_index); //sep
           labeled_inst = pc_saved;
           labeled_inst = leftShift(labeled_inst, 32) + ir;
           *(binary_labeled + pc_labeled) = labeled_inst;
@@ -6956,6 +7026,7 @@ void selfie_inliner() {
           // if (*(entry + 3) > 0) later
           ir = loadInstruction(pc);
           op_rs = rightShift(leftShift(ir, 32), 16 + 32);
+          num = 0;
           // until daddiu $sp,$fp,0
           while (op_rs != 26589) {
             decode();
@@ -6968,66 +7039,70 @@ void selfie_inliner() {
                   } else if (*(actualparam + 1) == 1) {
                     if (*(actualparam + 4) == REG_SP) {
 
-                      ir = loadInstruction(pc - INSTRUCTIONSIZE);
-                      if (opcode == OP_LD || (opcode == OP_SD && ir != 1740505080)) {
-                        locals = pc+INSTRUCTIONSIZE;
-                        ir = loadInstruction(locals);
-                        op_rs = rightShift(leftShift(ir, 32), 16 + 32);
-                        cnt = 0;
-                        // until daddiu $sp,$fp,0
-                        while (op_rs != 26589) {
-                          decode();
-                          if (opcode == OP_JAL) {
-                            func = searchFuncTable(instr_index * INSTRUCTIONSIZE);
-                            caller = searchCalls(func, locals);
-                            if (*(caller + 2) > 0) {
-                              if (cnt <= *(func + 2)) {
-                                *(actualparam + 3) = *(actualparam + 3) + *(caller + 2) * 8;
-                              }
-                            }
-                            break;
-                          } else if (opcode == OP_DADDIU) {
-                            if (rs == REG_SP)
-                              if (rt == REG_SP)
-                                if (signedLessThan(signExtend(immediate,16), 0))
-                                  cnt = cnt + 1;
-                          }
-                          locals = locals + INSTRUCTIONSIZE;
-                          ir = loadInstruction(locals);
-                          op_rs = rightShift(leftShift(ir, 32), 16 + 32);
-                        }
-                      } else {
-                        locals = pc+INSTRUCTIONSIZE;
-                        ir = loadInstruction(locals);
-                        op_rs = rightShift(leftShift(ir, 32), 16 + 32);
-                        cnt = 0;
-                        // until daddiu $sp,$fp,0
-                        while (op_rs != 26589) {
-                          decode();
-                          if (opcode == OP_JAL) {
-                            func = searchFuncTable(instr_index * INSTRUCTIONSIZE);
-                            caller = searchCalls(func, locals);
-                            if (*(caller + 2) > 0) {
-                              if (cnt < *(func + 2)) {
-                                *(actualparam + 3) = *(actualparam + 3) + *(caller + 2) * 8;
-                              }
-                            }
-                            break;
-                          } else if (opcode == OP_DADDIU) {
-                            if (rs == REG_SP)
-                              if (rt == REG_SP)
-                                if (signedLessThan(signExtend(immediate,16), 0))
-                                  cnt = cnt + 1;
-                          }
-                          locals = locals + INSTRUCTIONSIZE;
-                          ir = loadInstruction(locals);
-                          op_rs = rightShift(leftShift(ir, 32), 16 + 32);
-                        }
-                      }
+                      // ir = loadInstruction(pc - INSTRUCTIONSIZE);
+                      // if (opcode == OP_LD || (opcode == OP_SD && ir != 1740505080)) {
+                      //   locals = pc+INSTRUCTIONSIZE;
+                      //   ir = loadInstruction(locals);
+                      //   op_rs = rightShift(leftShift(ir, 32), 16 + 32);
+                      //   cnt = 0;
+                      //   // until daddiu $sp,$fp,0
+                      //   while (op_rs != 26589) {
+                      //     decode();
+                      //     if (opcode == OP_JAL) {
+                      //       func = searchFuncTable(instr_index * INSTRUCTIONSIZE);
+                      //       caller = searchCalls(func, locals);
+                      //       if (*(caller + 2) > 0) {
+                      //         if (cnt <= *(func + 2)) {
+                      //           *(actualparam + 3) = *(actualparam + 3) + *(caller + 2) * 8;
+                      //         }
+                      //       }
+                      //       break;
+                      //     } else if (opcode == OP_DADDIU) {
+                      //       if (rs == REG_SP)
+                      //         if (rt == REG_SP)
+                      //           if (signedLessThan(signExtend(immediate,16), 0))
+                      //             cnt = cnt + 1;
+                      //     }
+                      //     locals = locals + INSTRUCTIONSIZE;
+                      //     ir = loadInstruction(locals);
+                      //     op_rs = rightShift(leftShift(ir, 32), 16 + 32);
+                      //   }
+                      // } else {
+                      //   locals = pc+INSTRUCTIONSIZE;
+                      //   ir = loadInstruction(locals);
+                      //   op_rs = rightShift(leftShift(ir, 32), 16 + 32);
+                      //   cnt = 0;
+                      //   // until daddiu $sp,$fp,0
+                      //   while (op_rs != 26589) {
+                      //     decode();
+                      //     if (opcode == OP_JAL) {
+                      //       func = searchFuncTable(instr_index * INSTRUCTIONSIZE);
+                      //       caller = searchCalls(func, locals);
+                      //       if (*(caller + 2) > 0) {
+                      //         if (cnt < *(func + 2)) {
+                      //           *(actualparam + 3) = *(actualparam + 3) + *(caller + 2) * 8;
+                      //         }
+                      //       }
+                      //       break;
+                      //     } else if (opcode == OP_DADDIU) {
+                      //       if (rs == REG_SP)
+                      //         if (rt == REG_SP)
+                      //           if (signedLessThan(signExtend(immediate,16), 0))
+                      //             cnt = cnt + 1;
+                      //     }
+                      //     locals = locals + INSTRUCTIONSIZE;
+                      //     ir = loadInstruction(locals);
+                      //     op_rs = rightShift(leftShift(ir, 32), 16 + 32);
+                      //   }
+                      // }
 
                       ir = loadInstruction(pc);
                       decode();
-                      ir = encodeIFormat(opcode, *(actualparam + 4), rt, *(actualparam + 3));
+                      if (signedLessThan(num, 0) && num != 0) {
+                        print((uint64_t*) "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
+                        println();
+                      }
+                      ir = encodeIFormat(opcode, *(actualparam + 4), rt, *(actualparam + 3) + num * 8);
                     } else if (*(actualparam + 4) == REG_FP) {
                       ir = encodeIFormat(opcode, rs, rt, *(actualparam + 3));
                     } else {
@@ -7043,6 +7118,22 @@ void selfie_inliner() {
               // println();
             } else if (opcode == OP_BEQ) {
               ir = encodeIFormat(opcode, rs, rt, signExtend(immediate, 16)); // + 1 + max_pc
+            } else if (opcode == OP_DADDIU) {
+              //(ir == 1740439560) {
+              // addiu sp,sp,8
+              if (rs == REG_SP)
+                if (rt == REG_SP)
+                  if (signedLessThan(signExtend(immediate,16),0)) {
+                    num = num + 1;
+                  } else
+                    num = num - 1;
+            // } else if (ir == 1740505080) {
+            //   // addiu sp,sp,-8
+            //   num = num - 1;
+            } else if (opcode == OP_JAL) {
+              entry = searchFuncTable(instr_index * INSTRUCTIONSIZE);
+              if (entry != (uint64_t*) 0)
+                num = num - *(entry + 2);
             }
 
             labeled_inst = max_pc;
