@@ -6914,16 +6914,44 @@ void selfie_inliner() {
                   // printHexadecimal(ir,0);
                   // println();
                 }
+
                 // //tmp = rightShift(*(binary_labeled + labeled_inst + 3), 32);
                 // label = malloc(3 * SIZEOFUINT64);
                 // *label = (uint64_t) del_list;
                 // del_list = label;
                 // *(label + 1) = ir;
                 // *(label + 2) = pc_saved;
+
+                ////////////////////////////////////////////////////////////////
+                // if (cnt == params - 1) {
+                //   label = malloc(3 * SIZEOFUINT64);
+                //   *label = (uint64_t) del_list;
+                //   del_list = label;
+                //   *(label + 1) = pc;
+                //
+                //   tmp = pc + 3*INSTRUCTIONSIZE;
+                //   ir = loadInstruction(tmp);
+                //   decode();
+                //   while (opcode == 5) {
+                //     tmp = tmp + 3*INSTRUCTIONSIZE;
+                //     ir = loadInstruction(tmp);
+                //     decode();
+                //   }
+                //
+                //   *(label + 2) = tmp;
+                // }
+                ////////////////////////////////////////////////////////////////
+
+
                 tmp = leftShift(pc, 32);
-                //ir = encodeIFormat(5, 0, 0, 0); //del
-                ir = encodeRFormat(OP_SPECIAL, 0, 0, 0, FCT_NOP);
-                *(binary_labeled + labeled_inst) = tmp + ir;
+                ir = encodeIFormat(5, 0, 0, 0); //del
+                //ir = encodeRFormat(OP_SPECIAL, 0, 0, 0, FCT_NOP);
+                if (cnt == params - 1) {
+                  *(binary_labeled + labeled_inst) = tmp + encodeRFormat(OP_SPECIAL, 0, 0, 0, FCT_NOP);
+                } else {
+                  *(binary_labeled + labeled_inst) = tmp + ir;
+                }
+                //*(binary_labeled + labeled_inst) = tmp + ir;
                 labeled_inst = labeled_inst + 1;
                 tmp = leftShift(pc+INSTRUCTIONSIZE, 32);
                 *(binary_labeled + labeled_inst) = tmp + ir;
@@ -7205,24 +7233,24 @@ void selfie_inliner() {
 
   //////////////////////////// eliminate del
   codeLength = pc_labeled;
-  // pc_labeled = 0;
-  // pc = 0;
-  // binary_ = malloc(10 * maxBinaryLength);
-  // while(pc_labeled < codeLength) {
-  //   ir = *(binary_labeled + pc_labeled);
-  //   opcode = rightShift(leftShift(ir, 32), 32 + 26);
-  //
-  //   if (opcode != 5) {
-  //     *(binary_ + pc) = ir;
-  //     pc = pc + 1;
-  //   }
-  //
-  //   pc_labeled = pc_labeled + 1;
-  // }
-  // codeLength = pc;
+  pc_labeled = 0;
+  pc = 0;
+  binary_ = malloc(10 * maxBinaryLength);
+  while(pc_labeled < codeLength) {
+    ir = *(binary_labeled + pc_labeled);
+    opcode = rightShift(leftShift(ir, 32), 32 + 26);
+
+    if (opcode != 5) {
+      *(binary_ + pc) = ir;
+      pc = pc + 1;
+    }
+
+    pc_labeled = pc_labeled + 1;
+  }
+  codeLength = pc;
   ///////////////////////////////// labeling
   pc_labeled = 0;
-  //binary_labeled = binary_;
+  binary_labeled = binary_;
   while(pc_labeled < codeLength) {
     ir = *(binary_labeled + pc_labeled);
     pc = rightShift(ir, 32);
@@ -7248,9 +7276,9 @@ void selfie_inliner() {
       labels = label;
       *(label + 1) = pc + (signExtend(immediate, 16) + 1) * INSTRUCTIONSIZE;
       *(label + 2) = pc_labeled;
-      label = searchDels(*(label + 1));
-      if (label != (uint64_t*)0)
-        *(labels + 1) = *(label + 2);
+      // label = searchDels(*(label + 1));
+      // if (label != (uint64_t*)0)
+      //   *(labels + 1) = *(label + 2);
     } else if (opcode == OP_J) {
       label = malloc(3 * SIZEOFUINT64);
       *label = (uint64_t) labels;
