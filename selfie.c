@@ -714,7 +714,6 @@ uint64_t OP_BEQ     = 4;
 uint64_t OP_DADDIU  = 25;
 uint64_t OP_LD      = 55;
 uint64_t OP_SD      = 63;
-uint64_t OP_DEL      = 5;
 
 uint64_t* OPCODES; // strings representing MIPS opcodes
 
@@ -753,7 +752,6 @@ void initDecoder() {
   *(OPCODES + OP_DADDIU)  = (uint64_t) "daddiu";
   *(OPCODES + OP_LD)      = (uint64_t) "ld";
   *(OPCODES + OP_SD)      = (uint64_t) "sd";
-  *(OPCODES + OP_DEL)     = (uint64_t) "del";
 
   FUNCTIONS = smalloc((FCT_DSUBU + 1) * SIZEOFUINT64STAR);
 
@@ -974,7 +972,6 @@ uint64_t printCounters(uint64_t total, uint64_t* counters, uint64_t max);
 void     printProfile(uint64_t* message, uint64_t total, uint64_t* counters);
 
 void selfie_disassemble();
-void selfie_optimize();
 
 // ------------------------ GLOBAL CONSTANTS -----------------------
 
@@ -1005,6 +1002,7 @@ uint64_t debug = 0; // flag for logging code execution
 // hardware thread state
 
 uint64_t pc = 0; // program counter
+uint64_t pc_labeled = 0; // program counter
 uint64_t ir = 0; // instruction register
 
 uint64_t* registers = (uint64_t*) 0; // general-purpose registers
@@ -4330,7 +4328,7 @@ void decode() {
 
   if (opcode == 0)
     decodeRFormat();
-  else if (opcode == OP_JAL)
+  else if (opcode == OP_JAL || opcode == 6 || opcode == 1)
     decodeJFormat();
   else if (opcode == OP_J)
     decodeJFormat();
@@ -4395,8 +4393,8 @@ void storeData(uint64_t baddr, uint64_t data) {
 void emitInstruction(uint64_t instruction) {
   storeInstruction(binaryLength, instruction);
 
-  if (*(sourceLineNumber + binaryLength / INSTRUCTIONSIZE) == 0)
-    *(sourceLineNumber + binaryLength / INSTRUCTIONSIZE) = lineNumber;
+  // if (*(sourceLineNumber + binaryLength / INSTRUCTIONSIZE) == 0)
+  //   *(sourceLineNumber + binaryLength / INSTRUCTIONSIZE) = lineNumber;
 
   binaryLength = binaryLength + INSTRUCTIONSIZE;
 }
@@ -4629,6 +4627,8 @@ void selfie_load() {
 
     exit(EXITCODE_IOERROR);
   }
+
+  //maxBinaryLength = 10 * maxBinaryLength;
 
   // make sure binary is mapped
   binary = touch(smalloc(maxBinaryLength), maxBinaryLength);
@@ -5703,6 +5703,80 @@ void op_daddiu() {
   }
 }
 
+void op_del() {
+
+  if (debug) {
+    print((uint64_t*) "del");
+    print((uint64_t*) " ");
+    printRegister(rt);
+    print((uint64_t*) ",");
+    printInteger(signExtend(immediate, 16));
+    print((uint64_t*) "(");
+    printRegister(rs);
+    print((uint64_t*) ")");
+    println();
+  }
+
+  if (interpret)
+    pc = pc + INSTRUCTIONSIZE;
+
+}
+
+void op_sep() {
+
+  if (debug) {
+    print((uint64_t*) "sep");
+    print((uint64_t*) " ");
+    printHexadecimal(instr_index, 0);
+    print((uint64_t*) "[");
+    printHexadecimal(instr_index * INSTRUCTIONSIZE, 0);
+    print((uint64_t*) "]");
+    if (interpret) {
+      print((uint64_t*) ": ");
+      printRegister(REG_RA);
+      print((uint64_t*) "=");
+      printHexadecimal(*(registers+REG_RA), 0);
+    }
+  }
+
+  if (interpret) {
+    pc = pc + INSTRUCTIONSIZE;
+  }
+
+  if (debug) {
+    if (interpret) {
+      print((uint64_t*) " -> ");
+      printRegister(REG_RA);
+      print((uint64_t*) "=");
+      printHexadecimal(*(registers+REG_RA), 0);
+      print((uint64_t*) ",$pc=");
+      printHexadecimal(pc, 0);
+    }
+    println();
+  }
+
+}
+
+void op_ji() {
+
+  if (debug) {
+    print((uint64_t*) "ji");
+    print((uint64_t*) " ");
+    printHexadecimal(instr_index, 0);
+    print((uint64_t*) "[");
+    printHexadecimal(instr_index * INSTRUCTIONSIZE, 0);
+    print((uint64_t*) "]");
+    println();
+  }
+
+  if (interpret) {
+    pc = instr_index * INSTRUCTIONSIZE;
+
+    // TODO: execute delay slot
+  }
+
+}
+
 void op_ld() {
   uint64_t vaddr;
 
@@ -5816,64 +5890,6 @@ void op_sd() {
     }
     println();
   }
-}
-
-void op_del() {
-  // uint64_t vaddr;
-  // uint64_t tmp;
-  
-  if (debug) {
-    printOpcode(opcode);
-    print((uint64_t*) " ");
-    printRegister(rt);
-    print((uint64_t*) ",");
-    printInteger(signExtend(immediate, 16));
-    print((uint64_t*) "(");
-    printRegister(rs);
-    print((uint64_t*) ")");
-    println();
-  }
-
-  if (interpret)
-    pc = pc + INSTRUCTIONSIZE;
-
-  // if (debug) {
-  //   printOpcode(opcode);
-  //   print((uint64_t*) " ");
-  //   printRegister(rt);
-  //   print((uint64_t*) ",");
-  //   printInteger(signExtend(immediate, 16));
-  //   print((uint64_t*) "(");
-  //   printRegister(rs);
-  //   print((uint64_t*) ")");
-  //   if (interpret) {
-  //     print((uint64_t*) ": ");
-  //     printRegister(rt);
-  //     print((uint64_t*) "=");
-  //     printInteger(*(registers+rt));
-  //     print((uint64_t*) ",");
-  //     printRegister(rs);
-  //     print((uint64_t*) "=");
-  //     printHexadecimal(*(registers+rs), 0);
-  //   }
-  // }
-  //
-  // if (interpret) {
-  //   pc = pc + INSTRUCTIONSIZE;
-  // }
-  //
-  // if (debug) {
-  //   if (interpret) {
-  //     print((uint64_t*) " -> ");
-  //     printRegister(rt);
-  //     print((uint64_t*) "=");
-  //     printInteger(*(registers+rt));
-  //     print((uint64_t*) "=memory[");
-  //     printHexadecimal(vaddr, 0);
-  //     print((uint64_t*) "]");
-  //   }
-  //   println();
-  // }
 }
 
 void op_beq() {
@@ -6086,8 +6102,12 @@ void execute() {
     op_jal();
   else if (opcode == OP_J)
     op_j();
-  else if (opcode == OP_DEL)
+  else if (opcode == 5)
     op_del();
+  else if (opcode == 6)
+    op_sep();
+  else if (opcode == 1)
+    op_ji();
   else
     throwException(EXCEPTION_UNKNOWNINSTRUCTION, 0);
 }
@@ -6251,38 +6271,268 @@ void selfie_disassemble() {
   println();
 }
 
-void selfie_optimize() {
-  uint64_t rt1;
-  uint64_t rs1;
-  uint64_t immediate1;
+struct functions {
+  struct functions*  next;
+  uint64_t           pc;
+  uint64_t           params;
+  uint64_t           locals;
+  uint64_t           regs;
+  struct parameters* paramlist;
+  uint64_t           is_inline;
+  uint64_t           instr_count;
+  struct calls*      call_list;
+};
+
+struct functions* func_list;
+
+struct parameters {
+  struct parameters* next;
+  uint64_t           type;
+  uint64_t           old_addr;
+  uint64_t           new_addr;
+  uint64_t           reg;
+};
+
+struct calls {
+  struct calls* next;
+  uint64_t      call_pc;
+  uint64_t      save_tmps;
+  uint64_t      call_params;
+};
+
+struct calls* call_list;
+
+struct label {
+  struct label* next;
+  uint64_t      label;
+  uint64_t      new_pc;
+};
+
+struct label* labels;
+
+uint64_t* binary_labeled;
+uint64_t* binary_;
+uint64_t  savedcodeLength;
+
+struct functions* searchFuncTable(uint64_t func_pc) {
+  struct functions* entry;
+
+  entry = func_list;
+  while (entry != (struct functions*)0) {
+    if (entry->pc == func_pc)
+      return entry;
+
+    entry = entry->next;
+  }
+
+  return (struct functions*)0;
+}
+
+struct parameters* searchParlist(struct functions* entry, uint64_t offset) {
+  struct parameters* par_entry;
+
+  par_entry = entry->paramlist;
+  while (par_entry != (struct parameters*)0) {
+    if (par_entry->old_addr == offset)
+      return par_entry;
+
+    par_entry = par_entry->next;
+  }
+
+  return (struct parameters*)0;
+}
+
+struct functions* searchCallerFunction(uint64_t pc) {
+  struct functions* entry;
   uint64_t tmp;
 
-  assemblyName = getArgument();
+  entry = func_list;
+  while (entry != (struct functions*)0) {
+    tmp = entry->pc + (entry->instr_count + 11) * 4;
+    if (pc > entry->pc)
+      if (pc < tmp) {
+        return entry;
+      }
 
-  if (codeLength == 0) {
-    print(selfieName);
-    print((uint64_t*) ": nothing to disassemble to output file ");
-    print(assemblyName);
-    println();
-
-    return;
+    entry = entry->next;
   }
 
-  // assert: assemblyName is mapped and not longer than maxFilenameLength
+  return (struct functions*)0;
+}
 
-  assemblyFD = openWriteOnly(assemblyName);
+void searchLabel(uint64_t lab, uint64_t pc_labeled) {
+  struct label *entry;
+  uint64_t labeled_inst;
 
-  if (signedLessThan(assemblyFD, 0)) {
-    print(selfieName);
-    print((uint64_t*) ": could not create assembly output file ");
-    print(assemblyName);
-    println();
+  entry = labels;
+  while (entry != (struct label*)0) {
+    if (entry->label == lab) {
 
-    exit(EXITCODE_IOERROR);
+      ir = *(binary_labeled + entry->new_pc);
+      labeled_inst = rightShift(ir, 32);
+      ir = rightShift(leftShift(ir, 32), 32);
+      decode();
+      if (opcode == OP_JAL || opcode == OP_J) {
+        *(binary_labeled + entry->new_pc) = leftShift(labeled_inst, 32) + encodeJFormat(opcode, pc_labeled);
+      } else if (opcode == OP_BEQ) {
+        *(binary_labeled + entry->new_pc) = leftShift(labeled_inst, 32) + encodeIFormat(opcode, rs, rt, pc_labeled - entry->new_pc - 1);
+      } else if (opcode == 1) {
+        *(binary_labeled + entry->new_pc) = leftShift(labeled_inst, 32) + encodeJFormat(OP_J, pc_labeled);
+      }
+    }
+
+    entry = entry->next;
+  }
+}
+
+struct calls* searchCalls (struct functions* func_entry, uint64_t lab) {
+  struct calls* entry = func_entry->call_list;
+  while (entry != (struct calls*)0) {
+    if (entry->call_pc == lab) {
+      return entry;
+    }
+    entry = entry->next;
   }
 
-  outputName = assemblyName;
-  outputFD   = assemblyFD;
+  return (struct calls*)0;
+}
+
+void ignoreParams (uint64_t igns) {
+  uint64_t cnt;
+  uint64_t op_rs;
+
+  struct functions *func;
+  struct calls     *caller;
+
+  cnt = 0;
+  while (cnt < igns) {
+    pc = pc - INSTRUCTIONSIZE;
+    ir = loadInstruction(pc);
+    decode();
+    while (ir != 1740505080 && opcode != OP_JAL && opcode != 6) {
+      pc = pc - INSTRUCTIONSIZE;
+      ir = loadInstruction(pc);
+      decode();
+    }
+
+    if (opcode == OP_JAL) {
+      func = searchFuncTable(instr_index * INSTRUCTIONSIZE);
+      if (func != (struct functions*)0) {
+        caller = searchCalls(func, pc);
+        op_rs = caller->save_tmps + func->params;
+        ignoreParams(op_rs);
+      }
+      continue;
+    } else if (opcode == 6) {
+      func = searchFuncTable(instr_index * INSTRUCTIONSIZE);
+      if (func != (uint64_t*) 0) {
+        caller = searchCalls(func, pc);
+        op_rs = caller->save_tmps + caller->call_params;
+        ignoreParams(op_rs);
+      }
+      continue;
+    }
+
+    cnt = cnt + 1;
+  }
+}
+
+void func_scan() {
+  uint64_t reg_max;
+  uint64_t counter;
+  uint64_t pc_saved;
+  uint64_t rs_saved;
+  uint64_t op_rs;
+
+  struct parameters *var_pointer;
+
+  reg_max = 0;
+  ir = loadInstruction(pc);
+  op_rs = rightShift(leftShift(ir, 32), 16 + 32);
+  counter = 0;
+
+  // until daddiu $sp,$fp,0
+  while (op_rs != 26589) {
+    opcode = getOpcode(ir);
+
+    if (opcode == 0) {
+      rd = getRD(ir);
+      if (rd > reg_max) {
+        if (rd < REG_S0)
+          reg_max = rd;
+      }
+    } else if (opcode == OP_DADDIU) {
+      rt = getRT(ir);
+      if (rt > reg_max)
+        if (rt < REG_S0) {
+          reg_max = rt;
+        }
+    } else if (opcode == OP_LD) {
+      rt = getRT(ir);
+      if (rt > reg_max) {
+        if (rt < REG_S0) {
+          reg_max = rt;
+        }
+      }
+    } else if (opcode == OP_SD) {
+      decodeIFormat();
+      if (rs == REG_FP) {
+        if (signedGreaterThan(signExtend(immediate, 16), 0)) {
+          var_pointer           = malloc(sizeof(struct parameters));
+          var_pointer->next      = func_list->paramlist;
+          func_list->paramlist  = var_pointer;
+          var_pointer->type     = 1; // this means store
+          var_pointer->old_addr = immediate;
+        }
+      }
+    } else if (opcode == OP_JAL) { // for recursive call checking
+      decodeJFormat();
+      if (func_list->pc == (instr_index * INSTRUCTIONSIZE)) {
+        func_list->is_inline = 2;
+      }
+    }
+
+    counter = counter + 1;
+    pc = pc + INSTRUCTIONSIZE;
+    ir = loadInstruction(pc);
+    op_rs = rightShift(leftShift(ir, 32), 16 + 32);
+  }
+
+  func_list->regs        = reg_max;
+  func_list->instr_count = counter;
+
+  if (counter < 21 && func_list->locals == 0 && func_list->is_inline != 2)
+    func_list->is_inline = 1;
+  else
+    func_list->is_inline = 0;
+
+}
+
+void selfie_inliner() {
+  uint64_t locals;
+  uint64_t params;
+  uint64_t op_rs;
+  uint64_t cnt;
+  uint64_t pc_saved;
+  uint64_t labeled_inst;
+  uint64_t tmp;
+  uint64_t first_JAL;
+  uint64_t jump_pc;
+  uint64_t max_pc;
+  uint64_t savedBinaryLength;
+  uint64_t fd;
+  uint64_t num;
+
+  struct functions  *entry;
+  struct functions  *func;
+  struct calls      *caller;
+  struct label      *label;
+  struct parameters *formalparam;
+  struct parameters *actualparam;
+  struct parameters **param_list;
+
+  savedcodeLength = codeLength;
+  savedBinaryLength = binaryLength;
 
   interpret = 0;
 
@@ -6291,81 +6541,649 @@ void selfie_optimize() {
 
   debug = 1;
 
+  // binary instructions with labels. | pc as label (32 bits) | instruction (32 bits) |
+  binary_labeled = malloc(10 * maxBinaryLength);
+
+  // putting the information of exit, read, write, open, malloc, switch functions
+  func = malloc(sizeof(struct functions));
+  func->next        = func_list;
+  func_list         = func;
+  func->pc          = 224;
+  func->params      = 1;
+  func->locals      = 0;
+  func->regs        = 0;
+  func->paramlist   = (uint64_t*) 0;
+  func->is_inline   = 0;
+  func->instr_count = 0;
+  func->call_list   = (uint64_t*) 0;
+  ////
+  func = malloc(sizeof(struct functions));
+  func->next        = func_list;
+  func_list         = func;
+  func->pc          = 240;
+  func->params      = 3;
+  func->locals      = 0;
+  func->regs        = 0;
+  func->paramlist   = (uint64_t*) 0;
+  func->is_inline   = 0;
+  func->instr_count = 0;
+  func->call_list   = (uint64_t*) 0;
+  ////
+  func = malloc(sizeof(struct functions));
+  func->next        = func_list;
+  func_list         = func;
+  func->pc          = 280;
+  func->params      = 3;
+  func->locals      = 0;
+  func->regs        = 0;
+  func->paramlist   = (uint64_t*) 0;
+  func->is_inline   = 0;
+  func->instr_count = 0;
+  func->call_list   = (uint64_t*) 0;
+  ////
+  func = malloc(sizeof(struct functions));
+  func->next        = func_list;
+  func_list         = func;
+  func->pc          = 320;
+  func->params      = 3;
+  func->locals      = 0;
+  func->regs        = 0;
+  func->paramlist   = (uint64_t*) 0;
+  func->is_inline   = 0;
+  func->instr_count = 0;
+  func->call_list   = (uint64_t*) 0;
+  ////
+  func = malloc(sizeof(struct functions));
+  func->next        = func_list;
+  func_list         = func;
+  func->pc          = 360;
+  func->params      = 1;
+  func->locals      = 0;
+  func->regs        = 0;
+  func->paramlist   = (uint64_t*) 0;
+  func->is_inline   = 0;
+  func->instr_count = 0;
+  func->call_list   = (uint64_t*) 0;
+  ////
+  func = malloc(sizeof(struct functions));
+  func->next        = func_list;
+  func_list         = func;
+  func->pc          = 384;
+  func->params      = 2;
+  func->locals      = 0;
+  func->regs        = 0;
+  func->paramlist   = (uint64_t*) 0;
+  func->is_inline   = 0;
+  func->instr_count = 0;
+  func->call_list   = (uint64_t*) 0;
+
+  // first pass
+  // start analysis of each function in the binary code
+  while(pc < codeLength) {
+    ir = loadInstruction(pc);
+    opcode = getOpcode(ir);
+    decode();
+
+    // sd $ra,0($sp) => means the start of a function in the binary.
+    if (opcode == OP_SD) {
+      if (rt == REG_RA) {
+        if (rs == REG_SP) {
+          func = malloc(sizeof(struct functions));
+          func->next        = func_list;
+          func_list         = func;
+          func->pc          = pc - INSTRUCTIONSIZE;
+          func->params      = 0;
+          func->locals      = 0;
+          func->regs        = 0;
+          func->paramlist   = (uint64_t*) 0;
+          func->is_inline   = 0;
+          func->instr_count = 0;
+          func->call_list   = (uint64_t*) 0;
+
+          // Is the instruction at the following pc is =>
+          // daddiu $sp,$sp,-localVariables ?
+          pc = pc + 4 * INSTRUCTIONSIZE;
+          ir = loadInstruction(pc);
+          opcode = getOpcode(ir);
+          if (opcode == OP_DADDIU) {
+            decodeIFormat();
+            if (rt == REG_SP) {
+              if (rs == REG_SP) {
+                // extract number of locals from: daddiu $sp,$sp,-localVariables
+                locals = (-signExtend(immediate, 16)) / REGISTERSIZE;
+                func->locals = locals;
+                pc = pc + INSTRUCTIONSIZE;
+              }
+            }
+          }
+
+          // scan the code of the function
+          func_scan();
+
+          // now the instruction in the following pc is:
+          // daddiu $sp,$sp,(parameters + 1)
+          // extract the number of parameters
+          pc = pc + 4 * INSTRUCTIONSIZE;
+          ir = loadInstruction(pc);
+          opcode = getOpcode(ir);
+          if (opcode == OP_DADDIU) {
+            decodeIFormat();
+            if (rt == REG_SP) {
+              if (rs == REG_SP) {
+                params = (signExtend(immediate, 16) / REGISTERSIZE) - 1;
+                func->params = params;
+              } else {
+                exit(-1);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    pc = pc + INSTRUCTIONSIZE;
+  }
+
+  // this will be used for inlining the FUNCTIONS
+  // the label of the first inlined instruction will be started from this number
+  max_pc = pc;
+
+
+  // second pass
+  // for each function call in the binary, it tries to detect save_temporaries numbers.
+  // TODO: remove this pass
+  pc = 0;
   while(pc < codeLength) {
     ir = loadInstruction(pc);
     opcode = getOpcode(ir);
 
-    if (opcode == OP_SD) {
-      decodeIFormat();
-      //execute();
-      rt1 = rt;
-      rs1 = rs;
-      immediate1 = immediate;
+    if (opcode == OP_JAL) {
+      decodeJFormat();
+      entry = searchFuncTable(instr_index * INSTRUCTIONSIZE);
 
-      pc = pc + INSTRUCTIONSIZE;
-      ir = loadInstruction(pc);
-      opcode = getOpcode(ir);
-      if (opcode == OP_LD) {
-        decodeIFormat();
-        if (rt == rt1) {
-          if (immediate == immediate1) {
-            if (rs == rs1) {
-              //storeInstruction(pc, encodeIFormat(5, 0, 0, 0));
-              storeInstruction(pc, encodeIFormat(OP_DEL, rs, rt, signExtend(immediate, 16)));
-              opcode = OP_DEL;
-            }
-          }
-        }
-        //execute();
-      } else {
+      if (entry != (struct functions*)0) {
+        tmp = 0;
+        // skip NOP instruction after JAL
+        pc_saved = pc + 2 * INSTRUCTIONSIZE;
+        ir = loadInstruction(pc_saved);
         decode();
-        //execute();
+        while (opcode == OP_LD) {
+          pc_saved = pc_saved + INSTRUCTIONSIZE;
+          ir = loadInstruction(pc_saved);
+
+          // chech if this instruction is :
+          // addiu sp,sp,8
+          if (ir == 1740439560) {
+            // if yes this means there was a save_temporary.
+            tmp = tmp + 1;
+          } else {
+            break;
+          }
+          pc_saved = pc_saved + INSTRUCTIONSIZE;
+          ir = loadInstruction(pc_saved);
+          decode();
+        }
+
+        call_list = malloc(sizeof(struct calls));
+        call_list->next        = entry->call_list;
+        entry->call_list       = call_list;
+        call_list->call_pc     = pc;
+        call_list->save_tmps   = tmp; // number of save_temporaries
+        call_list->call_params = 0;   // later
       }
-    } else {
-      decode();
-      //execute();
     }
 
     pc = pc + INSTRUCTIONSIZE;
   }
 
-  resetInterpreter();
 
+  // third pass
+  // inlining
+  pc = 0;
+  first_JAL = 0;
   while(pc < codeLength) {
     ir = loadInstruction(pc);
+    opcode = getOpcode(ir);
+
+    if (opcode == OP_JAL) {
+      decodeJFormat();
+      entry = searchFuncTable(instr_index * INSTRUCTIONSIZE);
+
+      // if should be inlined
+      if (entry != (struct functions*)0 && entry->is_inline == 1 && first_JAL && pc < first_JAL) {
+        params = entry->params;
+        cnt = 0;
+        pc_saved = pc;
+        tmp = 0;
+        if (params > 0) {
+          // this is a 2 dim array;
+          // each row to one parameter
+          param_list = malloc(params * sizeof(struct parameters*));
+
+          // this part is important
+          // this is for finding parameters of this JAL;
+          // consider nested function calls, the parameters are not above the JAL
+          while (cnt < params) {
+            // start from the instruction above the JAL
+            pc = pc - INSTRUCTIONSIZE;
+            ir = loadInstruction(pc);
+            op_rs = ir;
+            decode();
+
+            // look for addiu sp,sp,-8 or JAL or SEP
+            while (op_rs != 1740505080 && opcode != OP_JAL && opcode != 6) {
+              pc = pc - INSTRUCTIONSIZE;
+              ir = loadInstruction(pc);
+              op_rs = ir;
+              decode();
+            }
+
+            // go up recursively for nested calls
+            if (opcode == OP_JAL) {
+              func = searchFuncTable(instr_index * INSTRUCTIONSIZE);
+              if (func != (struct functions*)0) {
+                caller = searchCalls(func, pc);
+                op_rs = caller->save_tmps + func->params;
+                ignoreParams(op_rs);
+              }
+              continue;
+            } else if (opcode == 6) {
+              func = searchFuncTable(instr_index * INSTRUCTIONSIZE);
+              if (func != (struct functions*)0) {
+                caller = searchCalls(func, pc);
+                op_rs = caller->save_tmps + caller->call_params;
+                ignoreParams(op_rs);
+              }
+              continue;
+            }
+
+            // now pc is on the first parameter of current JAL => addiu sp,sp,-8
+
+            pc = pc - INSTRUCTIONSIZE; // goto the ld param
+            ir = loadInstruction(pc);
+            op_rs = rightShift(leftShift(ir, 32), 21 + 32);
+            // if ld from .($gp) or .($fp)
+            // you can remove the parameter (type = 0)
+            // otherwise no (type = 1)
+            if (op_rs == 1790 || op_rs == 1788) {
+              decodeIFormat();
+              formalparam = searchParlist(entry, cnt * REGISTERSIZE + 16);
+              actualparam = malloc(sizeof(struct parameters));
+              param_list[cnt] = actualparam;
+              if (formalparam != (struct parameters*)0) {
+                actualparam->type     = formalparam->type;
+                actualparam->old_addr = formalparam->old_addr;
+                actualparam->new_addr = signExtend(immediate, 16);
+                actualparam->reg      = rs;
+              } else {
+                actualparam->type     = 0;
+                actualparam->old_addr = cnt * REGISTERSIZE + 16;
+                actualparam->new_addr = signExtend(immediate, 16);
+                actualparam->reg      = rs;
+              }
+            } else {
+              actualparam = malloc(sizeof(struct parameters));
+              param_list[cnt] = actualparam;
+              actualparam->type     = 1;
+              actualparam->old_addr = cnt * REGISTERSIZE + 16;
+              actualparam->new_addr = 0;
+              actualparam->reg      = 0;
+            }
+
+
+            ir = loadInstruction(pc_saved);
+            decode();
+            op_rs = instr_index * INSTRUCTIONSIZE;
+            // delete instructions for prameter load on stack with type = 0
+            if (actualparam->type == 0) {
+              labeled_inst = pc_labeled - 1;
+              ir = *(binary_labeled + labeled_inst);
+              ir = rightShift(ir, 32);
+
+              // go up in the new labeled binary to find these instrs and delete them
+              // pc now contains the pointer to the to be deleted instruction
+              while (ir != pc) {
+                labeled_inst = labeled_inst - 1;
+                ir = *(binary_labeled + labeled_inst);
+                ir = rightShift(ir, 32);
+              }
+
+              tmp = leftShift(pc, 32); // label
+              ir = encodeIFormat(5, 0, 0, 0); // del instuction
+
+              // ld value_of_parameter, .(addr)
+              // if it is the first parameter insert a NOP instead because it may be the destination of a branch
+              // otherwise mark it as del; later we delete it from the binary
+              if (cnt == params - 1) {
+                *(binary_labeled + labeled_inst) = tmp + encodeRFormat(OP_SPECIAL, 0, 0, 0, FCT_NOP);
+              } else {
+                *(binary_labeled + labeled_inst) = tmp + ir;
+              }
+
+              // two consecutive instructions
+              // daddiu sp, sp, -8
+              labeled_inst = labeled_inst + 1;
+              tmp = leftShift(pc + INSTRUCTIONSIZE, 32);
+              *(binary_labeled + labeled_inst) = tmp + ir;
+              // sd tmp, 0($sp)
+              labeled_inst = labeled_inst + 1;
+              tmp = leftShift(pc + 2 * INSTRUCTIONSIZE, 32);
+              *(binary_labeled + labeled_inst) = tmp + ir;
+            }
+
+            cnt = cnt + 1;
+          }
+
+          // change the address of the parameters (first phase)
+          cnt = 0;
+          tmp = 0;
+          caller = searchCalls(entry, pc_saved);
+          while (cnt < params) {
+            actualparam = param_list[cnt];
+            if (actualparam->type == 1) {
+              actualparam->new_addr = tmp * REGISTERSIZE;
+              actualparam->reg = REG_SP;
+              tmp = tmp + 1;
+            }
+            cnt = cnt + 1;
+          }
+
+          caller->call_params = tmp;
+        }
+
+
+        ir = loadInstruction(pc_saved);
+        decode();
+        // insert a NOP or SEP instead of JAL; because of jumps to here
+        //ir = encodeRFormat(OP_SPECIAL, 0, 0, 0, FCT_NOP);
+        ir = encodeJFormat(6, instr_index); // SEP instruction
+        labeled_inst = pc_saved;
+        labeled_inst = leftShift(labeled_inst, 32) + ir;
+        *(binary_labeled + pc_labeled) = labeled_inst;
+        pc_labeled = pc_labeled + 1;
+
+        // to first inst of the function after prolog
+        pc = (instr_index + 5) * INSTRUCTIONSIZE; // because we assumed there is no local in the inlined func
+
+        // for J instruction; jump to the end
+        jump_pc = (entry->instr_count * INSTRUCTIONSIZE) + max_pc; // to the inst after last (nop)
+
+        // start inlining
+        ir = loadInstruction(pc);
+        op_rs = rightShift(leftShift(ir, 32), 16 + 32);
+        num = 0;
+        // until daddiu $sp,$fp,0
+        while (op_rs != 26589) {
+          decode();
+          if (opcode == OP_LD || opcode == OP_SD) {
+            if (rs == REG_FP) {
+              if (signedGreaterThan(signExtend(immediate, 16), 0)) {
+                actualparam = param_list[(immediate - 16)/REGISTERSIZE];
+                if (actualparam->type == 0) {
+                  ir = encodeIFormat(opcode, actualparam->reg, rt, actualparam->new_addr);
+                } else if (actualparam->type == 1) {
+                  if (actualparam->reg == REG_SP) {
+                    ir = loadInstruction(pc);
+                    decode();
+                    ir = encodeIFormat(opcode, actualparam->reg, rt, actualparam->new_addr + num * REGISTERSIZE);
+                  } else if (actualparam->reg == REG_FP) {
+                    ir = encodeIFormat(opcode, rs, rt, actualparam->new_addr);
+                  }
+                }
+              }
+            }
+          } else if (opcode == OP_J) {
+            ir = encodeJFormat(1, jump_pc);
+          } else if (opcode == OP_BEQ) {
+            ir = encodeIFormat(opcode, rs, rt, signExtend(immediate, 16));
+          } else if (opcode == OP_DADDIU) {
+            // addiu sp,sp,8
+            if (rs == REG_SP)
+              if (rt == REG_SP)
+                if (signedLessThan(signExtend(immediate,16), 0)) {
+                  num = num + 1; // if you see addiu sp,sp,8 add 1
+                } else
+                  num = num - 1; // if you see addiu sp,sp,-8 sub 1
+          } else if (opcode == OP_JAL) {
+            entry = searchFuncTable(instr_index * INSTRUCTIONSIZE);
+            if (entry != (struct functions*)0)
+              num = num - entry->params;
+          }
+
+          labeled_inst = max_pc; // label
+          max_pc = max_pc + INSTRUCTIONSIZE;
+          labeled_inst = leftShift(labeled_inst, 32) + ir;
+          *(binary_labeled + pc_labeled) = labeled_inst; // insert the instruction
+          pc_labeled = pc_labeled + 1;
+          pc = pc + INSTRUCTIONSIZE;
+          ir = loadInstruction(pc);
+          op_rs = rightShift(leftShift(ir, 32), 16 + 32);
+        }
+
+        // insert a nop after all for destination of jumps
+        ir = encodeRFormat(OP_SPECIAL, 0, 0, 0, FCT_NOP);
+        labeled_inst = max_pc;
+        max_pc = max_pc + INSTRUCTIONSIZE;
+        labeled_inst = leftShift(labeled_inst, 32) + ir;
+        *(binary_labeled + pc_labeled) = labeled_inst;
+
+        // free parameters locations on the stack
+        // tmp is number of params for this JAL
+        if (tmp > 0) {
+          pc_labeled = pc_labeled + 1;
+          ir = encodeIFormat(OP_DADDIU, REG_SP, REG_SP, tmp * REGISTERSIZE);
+          labeled_inst = 0;
+          labeled_inst = leftShift(labeled_inst, 32) + ir;
+          *(binary_labeled + pc_labeled) = labeled_inst;
+        }
+        ////
+
+        pc = pc_saved;
+
+      } else {
+        labeled_inst = pc;
+        labeled_inst = leftShift(labeled_inst, 32) + ir;
+        *(binary_labeled + pc_labeled) = labeled_inst;
+      }
+
+      // don't inline main function
+      if (first_JAL == 0) {
+        // and don't inline calls inside the main
+        // TODO: improve this
+        first_JAL = instr_index * INSTRUCTIONSIZE;
+      }
+
+    } else {
+      labeled_inst = pc;
+      labeled_inst = leftShift(labeled_inst, 32) + ir;
+      *(binary_labeled + pc_labeled) = labeled_inst;
+    }
+
+    pc = pc + INSTRUCTIONSIZE;
+    pc_labeled = pc_labeled + 1;
+  }
+
+  //
+  // remove del instructions
+  codeLength = pc_labeled;
+  pc_labeled = 0;
+  pc = 0;
+  binary_ = malloc(10 * maxBinaryLength);
+  while(pc_labeled < codeLength) {
+    ir = *(binary_labeled + pc_labeled);
+    opcode = rightShift(leftShift(ir, 32), 32 + 26);
+
+    if (opcode != 5) {
+      *(binary_ + pc) = ir;
+      pc = pc + 1;
+    }
+
+    pc_labeled = pc_labeled + 1;
+  }
+  codeLength = pc;
+
+  //
+  // labeling to real pcs
+  pc_labeled = 0;
+  binary_labeled = binary_;
+  while(pc_labeled < codeLength) {
+    ir = *(binary_labeled + pc_labeled);
+    pc = rightShift(ir, 32);
+    ir = rightShift(leftShift(ir, 32), 32);
 
     decode();
 
-    if (opcode == OP_BEQ) {
-      execute();
-
-      tmp = pc + INSTRUCTIONSIZE + signExtend(immediate, 16) * INSTRUCTIONSIZE;
-      ir = loadInstruction(tmp);
-      opcode = getOpcode(ir);
-      if (opcode == OP_DEL) {
-        decode();
-        storeInstruction(tmp, encodeIFormat(OP_LD, rs, rt, signExtend(immediate, 16)));
-      }
-    } else {
-      execute();
+    if (opcode == OP_JAL || opcode == 6) {
+      label = malloc(sizeof(struct label));
+      label->next = labels;
+      labels = label;
+      label->label = instr_index * INSTRUCTIONSIZE;
+      label->new_pc = pc_labeled;
+    } else if (opcode == OP_BEQ) {
+      label = malloc(sizeof(struct label));
+      label->next = labels;
+      labels = label;
+      label->label = pc + (signExtend(immediate, 16) + 1) * INSTRUCTIONSIZE;
+      label->new_pc = pc_labeled;
+    } else if (opcode == OP_J) {
+      label = malloc(sizeof(struct label));
+      label->next = labels;
+      labels = label;
+      label->label = instr_index * INSTRUCTIONSIZE;
+      label->new_pc = pc_labeled;
+    } else if (opcode == 1) {
+      label = malloc(sizeof(struct label));
+      label->next = labels;
+      labels = label;
+      label->label = instr_index;
+      label->new_pc = pc_labeled;
     }
 
-    pc = pc + INSTRUCTIONSIZE;
+    pc_labeled = pc_labeled + 1;
   }
 
-  debug = 0;
+  pc_labeled = 0;
+  while(pc_labeled < codeLength) {
+    ir = *(binary_labeled + pc_labeled);
+    pc = rightShift(ir, 32);
 
-  outputName = (uint64_t*) 0;
-  outputFD   = 1;
+    searchLabel(pc, pc_labeled);
 
+    pc_labeled = pc_labeled + 1;
+  }
+
+  //
+  // binary generation
+  pc = 0;
+  binary_ = binary;
+  maxBinaryLength = 10 * maxBinaryLength;
+  binary = malloc(maxBinaryLength);
+  pc_labeled = 0;
+  binaryLength = 0;
+  while(pc_labeled < codeLength) {
+    ir = *(binary_labeled + pc_labeled);
+    ir = rightShift(leftShift(ir, 32), 32);
+
+    emitInstruction(ir);
+
+    pc_labeled = pc_labeled + 1;
+  }
+
+  codeLength = binaryLength;
+  pc = savedcodeLength;
+  // for alignment of the memory
+  if (binaryLength % 8 != 0) {
+    binaryLength = binaryLength + 4;
+  }
+  // copy data segment
+  while(pc < savedBinaryLength) {
+    *(binary + binaryLength / SIZEOFUINT64) = *(binary_ + pc / SIZEOFUINT64);
+    binaryLength = binaryLength + REGISTERSIZE;
+    pc = pc + REGISTERSIZE;
+  }
+
+  bootstrapCode();
+
+  //
+  // write binary to the output
+  binaryName = getArgument();
+  if (binaryLength == 0) {
+    print(selfieName);
+    print((uint64_t*) ": nothing to emit to output file ");
+    print(binaryName);
+    println();
+
+    return;
+  }
+  fd = openWriteOnly(binaryName);
+  if (signedLessThan(fd, 0)) {
+    print(selfieName);
+    print((uint64_t*) ": could not create binary output file ");
+    print(binaryName);
+    println();
+
+    exit(EXITCODE_IOERROR);
+  }
+  *binary_buffer = codeLength;
+  write(fd, binary_buffer, SIZEOFUINT64);
+  write(fd, binary, binaryLength);
   print(selfieName);
   print((uint64_t*) ": ");
-  printInteger(numberOfWrittenCharacters);
-  print((uint64_t*) " characters of assembly with ");
+  printInteger(binaryLength + DOUBLEWORDSIZE);
+  print((uint64_t*) " bytes with ");
   printInteger(codeLength / INSTRUCTIONSIZE);
-  print((uint64_t*) " instructions written into ");
-  print(assemblyName);
+  print((uint64_t*) " instructions and ");
+  printInteger(binaryLength - codeLength + DOUBLEWORDSIZE);
+  print((uint64_t*) " bytes of data written into ");
+  print(binaryName);
   println();
+
+  // resetLibrary();
+  // resetInterpreter();
+  //
+  // assemblyName = getArgument();
+  // // assert: assemblyName is mapped and not longer than maxFilenameLength
+  // assemblyFD = openWriteOnly(assemblyName);
+  // if (signedLessThan(assemblyFD, 0)) {
+  //   print(selfieName);
+  //   print((uint64_t*) ": could not create assembly output file ");
+  //   print(assemblyName);
+  //   println();
+  //
+  //   exit(EXITCODE_IOERROR);
+  // }
+  // outputName = assemblyName;
+  // outputFD   = assemblyFD;
+  //
+  // codeLength = pc_labeled;
+  // pc_labeled = 0;
+  // while(pc_labeled < codeLength) {
+  //   ir = *(binary_labeled + pc_labeled);
+  //   //pc = rightShift(ir, 32);
+  //   ir = rightShift(leftShift(ir, 32), 32);
+  //
+  //   //ir = loadInstruction(pc);
+  //
+  //   decode();
+  //   execute();
+  //
+  //   pc_labeled = pc_labeled + 1;
+  //   pc = pc + INSTRUCTIONSIZE;
+  // }
+  //
+  // debug = 0;
+  //
+  // outputName = (uint64_t*) 0;
+  // outputFD   = 1;
+  //
+  // print(selfieName);
+  // print((uint64_t*) ": ");
+  // printInteger(numberOfWrittenCharacters);
+  // print((uint64_t*) " characters of assembly with ");
+  // printInteger(codeLength / INSTRUCTIONSIZE);
+  // print((uint64_t*) " instructions written into ");
+  // print(assemblyName);
+  // println();
 }
 
 // -----------------------------------------------------------------
@@ -7560,9 +8378,9 @@ void printUsage() {
 uint64_t selfie() {
   uint64_t* option;
 
-  if (numberOfRemainingArguments() == 0)
+  if (numberOfRemainingArguments() == 0) {
     printUsage();
-  else {
+  } else {
     initScanner();
     initRegister();
     initDecoder();
@@ -7582,7 +8400,7 @@ uint64_t selfie() {
       } else if (stringCompare(option, (uint64_t*) "-o"))
         selfie_output();
       else if (stringCompare(option, (uint64_t*) "-s"))
-        selfie_disassemble();
+        selfie_inliner();
       else if (stringCompare(option, (uint64_t*) "-l"))
         selfie_load();
       else if (stringCompare(option, (uint64_t*) "-sat"))
@@ -7599,8 +8417,6 @@ uint64_t selfie() {
         return selfie_run(MINSTER);
       else if (stringCompare(option, (uint64_t*) "-mob"))
         return selfie_run(MOBSTER);
-      else if (stringCompare(option, (uint64_t*) "-opt"))
-        selfie_optimize();
       else {
         printUsage();
 
