@@ -800,7 +800,7 @@ void selfie_load();
 
 // ------------------------ GLOBAL CONSTANTS -----------------------
 
-uint64_t maxBinaryLength = 262144; // 256KB
+uint64_t maxBinaryLength = 1048576; // 1024KB
 
 // ------------------------ GLOBAL VARIABLES -----------------------
 
@@ -4628,8 +4628,6 @@ void selfie_load() {
     exit(EXITCODE_IOERROR);
   }
 
-  //maxBinaryLength = 10 * maxBinaryLength;
-
   // make sure binary is mapped
   binary = touch(smalloc(maxBinaryLength), maxBinaryLength);
 
@@ -6425,7 +6423,7 @@ void ignoreParams (uint64_t igns) {
       continue;
     } else if (opcode == 6) {
       func = searchFuncTable(instr_index * INSTRUCTIONSIZE);
-      if (func != (uint64_t*) 0) {
+      if (func != (struct functions*) 0) {
         caller = searchCalls(func, pc);
         op_rs = caller->save_tmps + caller->call_params;
         ignoreParams(op_rs);
@@ -6542,7 +6540,7 @@ void selfie_inliner() {
   debug = 1;
 
   // binary instructions with labels. | pc as label (32 bits) | instruction (32 bits) |
-  binary_labeled = malloc(10 * maxBinaryLength);
+  binary_labeled = malloc(maxBinaryLength);
 
   // putting the information of exit, read, write, open, malloc, switch functions
   func = malloc(sizeof(struct functions));
@@ -6552,10 +6550,10 @@ void selfie_inliner() {
   func->params      = 1;
   func->locals      = 0;
   func->regs        = 0;
-  func->paramlist   = (uint64_t*) 0;
+  func->paramlist   = 0;
   func->is_inline   = 0;
   func->instr_count = 0;
-  func->call_list   = (uint64_t*) 0;
+  func->call_list   = 0;
   ////
   func = malloc(sizeof(struct functions));
   func->next        = func_list;
@@ -6564,10 +6562,10 @@ void selfie_inliner() {
   func->params      = 3;
   func->locals      = 0;
   func->regs        = 0;
-  func->paramlist   = (uint64_t*) 0;
+  func->paramlist   = 0;
   func->is_inline   = 0;
   func->instr_count = 0;
-  func->call_list   = (uint64_t*) 0;
+  func->call_list   = 0;
   ////
   func = malloc(sizeof(struct functions));
   func->next        = func_list;
@@ -6576,10 +6574,10 @@ void selfie_inliner() {
   func->params      = 3;
   func->locals      = 0;
   func->regs        = 0;
-  func->paramlist   = (uint64_t*) 0;
+  func->paramlist   = 0;
   func->is_inline   = 0;
   func->instr_count = 0;
-  func->call_list   = (uint64_t*) 0;
+  func->call_list   = 0;
   ////
   func = malloc(sizeof(struct functions));
   func->next        = func_list;
@@ -6588,10 +6586,10 @@ void selfie_inliner() {
   func->params      = 3;
   func->locals      = 0;
   func->regs        = 0;
-  func->paramlist   = (uint64_t*) 0;
+  func->paramlist   = 0;
   func->is_inline   = 0;
   func->instr_count = 0;
-  func->call_list   = (uint64_t*) 0;
+  func->call_list   = 0;
   ////
   func = malloc(sizeof(struct functions));
   func->next        = func_list;
@@ -6600,10 +6598,10 @@ void selfie_inliner() {
   func->params      = 1;
   func->locals      = 0;
   func->regs        = 0;
-  func->paramlist   = (uint64_t*) 0;
+  func->paramlist   = 0;
   func->is_inline   = 0;
   func->instr_count = 0;
-  func->call_list   = (uint64_t*) 0;
+  func->call_list   = 0;
   ////
   func = malloc(sizeof(struct functions));
   func->next        = func_list;
@@ -6612,10 +6610,10 @@ void selfie_inliner() {
   func->params      = 2;
   func->locals      = 0;
   func->regs        = 0;
-  func->paramlist   = (uint64_t*) 0;
+  func->paramlist   = 0;
   func->is_inline   = 0;
   func->instr_count = 0;
-  func->call_list   = (uint64_t*) 0;
+  func->call_list   = 0;
 
   // first pass
   // start analysis of each function in the binary code
@@ -6635,10 +6633,10 @@ void selfie_inliner() {
           func->params      = 0;
           func->locals      = 0;
           func->regs        = 0;
-          func->paramlist   = (uint64_t*) 0;
+          func->paramlist   = 0;
           func->is_inline   = 0;
           func->instr_count = 0;
-          func->call_list   = (uint64_t*) 0;
+          func->call_list   = 0;
 
           // Is the instruction at the following pc is =>
           // daddiu $sp,$sp,-localVariables ?
@@ -6895,8 +6893,8 @@ void selfie_inliner() {
         ir = loadInstruction(pc_saved);
         decode();
         // insert a NOP or SEP instead of JAL; because of jumps to here
-        //ir = encodeRFormat(OP_SPECIAL, 0, 0, 0, FCT_NOP);
-        ir = encodeJFormat(6, instr_index); // SEP instruction
+        ir = encodeRFormat(OP_SPECIAL, 0, 0, 0, FCT_NOP);
+        //ir = encodeJFormat(6, instr_index); // SEP instruction
         labeled_inst = pc_saved;
         labeled_inst = leftShift(labeled_inst, 32) + ir;
         *(binary_labeled + pc_labeled) = labeled_inst;
@@ -7008,7 +7006,7 @@ void selfie_inliner() {
   codeLength = pc_labeled;
   pc_labeled = 0;
   pc = 0;
-  binary_ = malloc(10 * maxBinaryLength);
+  binary_ = malloc(maxBinaryLength);
   while(pc_labeled < codeLength) {
     ir = *(binary_labeled + pc_labeled);
     opcode = rightShift(leftShift(ir, 32), 32 + 26);
@@ -7076,7 +7074,6 @@ void selfie_inliner() {
   // binary generation
   pc = 0;
   binary_ = binary;
-  maxBinaryLength = 10 * maxBinaryLength;
   binary = malloc(maxBinaryLength);
   pc_labeled = 0;
   binaryLength = 0;
@@ -8400,6 +8397,8 @@ uint64_t selfie() {
       } else if (stringCompare(option, (uint64_t*) "-o"))
         selfie_output();
       else if (stringCompare(option, (uint64_t*) "-s"))
+        selfie_disassemble();
+      else if (stringCompare(option, (uint64_t*) "-inline"))
         selfie_inliner();
       else if (stringCompare(option, (uint64_t*) "-l"))
         selfie_load();
